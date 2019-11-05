@@ -1,0 +1,5 @@
+certifi==2019.3.9
+cx-Freeze==6.0
+pywin32==224
+pyWinhook==1.6.1
+wincertstore==0.2
