@@ -30,9 +30,9 @@ If you want to micspam, there are additional steps.
 1. Install VB-Audio Virtual Cable, available as donationware from [here](https://www.vb-audio.com/Cable/) (the orange download button)
 
 2. Open WinDJHelper and find the long code for the device called CABLE Input (VB-Audio Virtual Cable). 
-It should be something along the lines of `{0.0.0.00000000}.{9bfca61f-07f6-49b0-9313-35cd914fa71a}`.
  
-3. Open `config.cfg`, remove the `;` from in front of the audiodevice setting, and paste your code in there, like the example
+3. Open `config.cfg`, remove the `;` from in front of the audiodevice setting, and paste your code in there. 
+It should look something like `output_device: {0.0.0.00000000}.{9bfca61f-07f6-49b0-9313-35cd914fa71a}`.
  
 4. Set VB Cable as the mic input to whatever program you want to micspam for. 
 Unfortunately Source games do not allow you to set a mic input and you will therefore need to make VB Cable your default system mic.
@@ -63,8 +63,10 @@ You could change `hide_on_play` to `false` if you wanted WinDJ to stay on top of
 You can increase this if you have a huge songlist, for example.
 - `fixed_position` is whether the WinDJ window is fixed on the screen, or draggable. 
 If it fixed it has no title bar and is therefore slightly smaller.
+- `controls_captured` is whether WinDJ controls will be captured (invisible to other programs) or not.
+If you wish to micspam as in the instructions above, this must be false to allow the game to register the micspam toggle button.
 - `output_device` is the device code that WinDJ will output audio to. 
-You can leave this blank if you want WinDJ to output over your speakers.
+You can comment this out with a `;` if you want WinDJ to output over your default sound output.
 
 ## Controls
 Most of the controls are self-explanatory. Below are the more complex ones.

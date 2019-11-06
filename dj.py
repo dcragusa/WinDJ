@@ -77,6 +77,7 @@ Settings = AttrDict({
     'hor_offset': get_setting_from_config('hor_offset', int, 1620),
     'ver_offset': get_setting_from_config('ver_offset', int, 100),
     'scroll_step': get_setting_from_config('scroll_step', int, 5),
+    'controls_captured': get_setting_from_config('controls_captured', bool, False),
     'output_device': get_setting_from_config('output_device', str, None)
 })
 
@@ -418,7 +419,7 @@ if __name__ == '__main__':
         queue.put(event.Key)
         p_write.send(1)
         # controls captured by WinDJ and not passed through
-        return event.Key not in Controls.values()
+        return not Settings.controls_captured and event.Key in Controls.values()
 
     # poll the keyboard hook
     pipeloop = threading.Thread(target=start_pipe_loop)
