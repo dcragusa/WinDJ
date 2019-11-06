@@ -419,7 +419,7 @@ if __name__ == '__main__':
         queue.put(event.Key)
         p_write.send(1)
         # controls captured by WinDJ and not passed through
-        return not Settings.controls_captured and event.Key in Controls.values()
+        return not (Settings.controls_captured and event.Key in Controls.values())
 
     # poll the keyboard hook
     pipeloop = threading.Thread(target=start_pipe_loop)
