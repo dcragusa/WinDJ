@@ -172,6 +172,10 @@ class WinDJ:
         self.listbox.bind('<Next>', self.ignore_event)
         self.listbox.bind('<Prior>', self.ignore_event)
 
+        # bind clicks
+        self.listbox.bind('<Button-1>', self.click)
+        self.listbox.bind('<Double-Button-1>', self.double_click)
+
         # select first item
         self.listbox.selection_set(0)
 
@@ -200,6 +204,16 @@ class WinDJ:
     def button_press(self, _):
         if not queue.empty():
             self.handle_button(queue.get())
+
+    def click(self, event):
+        self.listbox.selection_clear(self.selected)
+        self.selected = self.listbox.nearest(event.y)
+        self.listbox.selection_set(self.selected)
+        self.listbox.activate(self.selected)
+
+    def double_click(self, event):
+        self.click(event)
+        self.play()
 
     def set_selection(self):
         self.listbox.selection_set(self.selected)
