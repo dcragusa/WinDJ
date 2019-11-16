@@ -1,13 +1,7 @@
 SilentInstall silent
 RequestExecutionLevel user
 OutFile "WinDJHelper.exe"
-
-;!include MUI2.nsh
-;!define MUI_ICON "favicon.ico"
-
-;!insertmacro MUI_PAGE_WELCOME ; Commenting out this line has no effect on the icon nor UAC elevation
-;!insertmacro MUI_PAGE_INSTFILES
-;!insertmacro MUI_LANGUAGE English
+Icon "favicon.ico"
 
 Section
 InitPluginsDir
