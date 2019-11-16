@@ -130,7 +130,7 @@ class WinDJ:
         self.searching = False
         self.searchstring = ''
         self.searchresult = ''
-        self.savedvolume = 100
+        self.saved_volume = 50
         self.playingname = ''
         self.playlock = False
 
@@ -256,12 +256,12 @@ class WinDJ:
                 self.selected = self.listbox.size()-1
             self.set_selection()
         elif key == Controls.vol_up:
-            self.p.audio_set_volume(self.p.audio_get_volume() + 2)
-            self.savedvolume += 2
+            self.saved_volume += 1
+            self.p.audio_set_volume(self.saved_volume * 2)
             self.update_labels()
         elif key == Controls.vol_down:
-            self.p.audio_set_volume(self.p.audio_get_volume() - 2)
-            self.savedvolume -= 2
+            self.saved_volume -= 1
+            self.p.audio_set_volume(self.saved_volume * 2)
             self.update_labels()
         elif key == Controls.search:
             self.hide_search() if self.searching else self.show_search()
@@ -311,11 +311,11 @@ class WinDJ:
             self.hide()
         if self.searching:
             self.hide_search()
-        self.update_labels(firstplay=True)
+        self.update_labels()
 
     def stop(self):
         self.playing = False
-        self.savedvolume = self.p.audio_get_volume()
+        self.saved_volume = int(self.p.audio_get_volume() / 2)
         self.p.stop()
         self.instance = vlc.Instance()
         self.p = self.instance.media_player_new()
@@ -341,7 +341,7 @@ class WinDJ:
         self.root.deiconify()
         self.visible = True
 
-    def update_labels(self, firstplay=False):
+    def update_labels(self):
         if self.playing:
             playing = 'Playing'
             songname = self.playingname
@@ -349,20 +349,14 @@ class WinDJ:
             playing = 'Stopped'
             songname = '-'
 
-        if firstplay:
-            vol = str(self.savedvolume/2)
-        else:
-            vol = str(self.p.audio_get_volume()/2)
-        volume = ' | Volume: ' + vol
-
-        self.status.set(playing + volume)
         self.song_name.set(songname)
+        self.status.set(f'{playing} | Volume: {self.saved_volume}')
 
     def update_timer(self):
         if self.playing:
-            curtime = str(round(self.p.get_time()/1000))
-            tottime = str(round(self.p.get_length()/1000))
-            self.timer.set(curtime + '/' + tottime)
+            curtime = '%d:%02d' % divmod(round(self.p.get_time()/1000), 60)
+            tottime = '%d:%02d' % divmod(round(self.p.get_length()/1000), 60)
+            self.timer.set(f'{curtime} / {tottime}')
         else:
             self.timer.set('-')
         self.root.after(500, self.update_timer)
