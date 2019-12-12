@@ -2,7 +2,12 @@
 # Refer to the LICENSE file.
 
 import os
+import re
+import sys
+import pafy
+import html
 import queue
+import requests
 import threading
 import pyWinhook
 import tkinter as tk
@@ -83,36 +88,21 @@ Settings = AttrDict({
 
 Controls = AttrDict({
     'reset': get_control_from_config('reset'),
-    'show_hide': get_control_from_config('show_hide'),
+    'toggle_show': get_control_from_config('toggle_show'),
     'quit': get_control_from_config('quit'),
-    'play_stop': get_control_from_config('play_stop'),
+    'toggle_play': get_control_from_config('toggle_play'),
     'vol_up': get_control_from_config('vol_up'),
     'vol_down': get_control_from_config('vol_down'),
     'nav_up': get_control_from_config('nav_up'),
     'nav_down': get_control_from_config('nav_down'),
     'nav_mult_up': get_control_from_config('nav_mult_up'),
     'nav_mult_down': get_control_from_config('nav_mult_down'),
-    'search': get_control_from_config('search')
+    'search': get_control_from_config('search'),
+    'yt_mode': get_control_from_config('yt_mode')
 })
 
-
-# Find songs
-def populate_songs():
-    song_list = []
-    index = 0
-    for folder in folders:
-        value, path = folder
-        try:
-            filenames = sorted(os.listdir(path))
-        except OSError:
-            errorbox(f'You have specified an invalid folder:\n{path}')
-        for filename in filenames:
-            display = os.path.splitext(filename)[0]
-            song_list.append({'index': index, 'path': path, 'filename': filename, 'display': display})
-            index += 1
-    if not song_list:
-        errorbox('There are no files in the folders selected.')
-    return song_list
+# necessary as tk can't display chars outside of BMP
+non_bmp_map = dict.fromkeys(range(0x10000, sys.maxunicode + 1), 0xfffd)
 
 
 class WinDJ:
@@ -126,34 +116,38 @@ class WinDJ:
         # WinDJ init
         self.visible = True
         self.playing = False
-        self.selected = 0
-        self.searching = False
-        self.searchstring = ''
-        self.searchresult = ''
+        self.search_open = False
+        self.search_string = ''
         self.saved_volume = 50
-        self.playingname = ''
-        self.playlock = False
+        self.playing_name = ''
+        self.play_lock = False
+        self.youtube_mode = False
+        self.youtube_thread = None
 
         # song list
-        self.song_list = populate_songs()
+        self.song_list = None  # will be populated line below
+        self.populate_song_list()
+        self.youtube_list = []
 
         # initialise vlc
-        self.instance = vlc.Instance()
+        self.instance = vlc.Instance('--no-video')
         self.p = self.instance.media_player_new()
 
-        # bottom labels
-        self.song_name = tk.StringVar()
-        self.label1 = tk.Label(self.root, textvariable=self.song_name, anchor=tk.W)
-        self.label1.grid(row=2, columnspan=2)
-        self.timer = tk.StringVar()
-        self.label2 = tk.Label(self.root, textvariable=self.timer, anchor=tk.W)
-        self.label2.grid(row=3, columnspan=2)
-        self.status = tk.StringVar()
-        self.label3 = tk.Label(self.root, textvariable=self.status)
-        self.label3.grid(row=4, columnspan=2)
+        # searches and labels
         self.search = tk.StringVar()
         self.search_box = tk.Label(self.root, textvariable=self.search)
         self.search_box.grid(row=0, columnspan=2)
+        self.song_name = tk.StringVar()
+        self.label_songname = tk.Label(self.root, textvariable=self.song_name, anchor=tk.W)
+        self.label_songname.grid(row=2, columnspan=2)
+        self.timer = tk.StringVar()
+        self.label_timer = tk.Label(self.root, textvariable=self.timer, anchor=tk.W)
+        self.label_timer.grid(row=3, columnspan=2)
+        self.status = tk.StringVar()
+        self.label_status = tk.Label(self.root, textvariable=self.status)
+        self.label_status.grid(row=4, columnspan=2)
+        self.button_youtube = tk.Button(self.root, text='Youtube', command=self.toggle_youtube_mode)
+        self.button_youtube.grid(row=5, columnspan=2)
         self.search_box.grid_remove()
 
         # scrollbar and listbox
@@ -191,145 +185,192 @@ class WinDJ:
         self.root.rowconfigure(1, weight=1)
         self.root.columnconfigure(1, weight=1)
 
-    def ignore_event(self, _):
-        return 'break'
-
     def ensure_top(self):
         self.root.lift()
         self.root.after(5000, self.ensure_top)
 
-    def release_lock(self):
-        self.playlock = False
+    def ignore_event(self, _):
+        return 'break'
 
     def button_press(self, _):
         if not queue.empty():
             self.handle_button(queue.get())
 
+    def populate_song_list(self):
+        song_list = []
+        index = 0
+        for folder in folders:
+            value, path = folder
+            try:
+                filenames = sorted(os.listdir(path))
+            except OSError:
+                errorbox(f'You have specified an invalid folder:\n{path}')
+                sys.exit(0)
+            for filename in filenames:
+                display = os.path.splitext(filename)[0]
+                song_list.append({'index': index, 'path': path, 'filename': filename, 'display': display})
+                index += 1
+        if not song_list:
+            errorbox('There are no files in the folders selected.')
+        self.song_list = song_list
+
+    @property
+    def selected(self):
+        return self.listbox.curselection()[0] if self.listbox.curselection() else 0
+
+    def release_play_lock(self):
+        self.play_lock = False
+
     def click(self, event):
-        self.listbox.selection_clear(self.selected)
-        self.selected = self.listbox.nearest(event.y)
-        self.listbox.selection_set(self.selected)
-        self.listbox.activate(self.selected)
+        idx = self.listbox.nearest(event.y)
+        self.set_selection(idx)
 
     def double_click(self, event):
         self.click(event)
         self.play()
 
-    def set_selection(self):
-        self.listbox.selection_set(self.selected)
-        self.listbox.activate(self.selected)
-        self.listbox.see(self.selected)
+    def set_selection(self, idx):
+        self.listbox.selection_clear(0, tk.END)
+        self.listbox.selection_set(idx)
+        self.listbox.activate(idx)
+        self.listbox.see(idx)
 
     def handle_button(self, key):
-        if self.searching:
+        if self.search_open:
             process = False
             if key in Controls.values():
                 # controls override search
                 pass
             elif len(key) == 1:
                 # not control character
-                self.searchstring += key.lower()
+                self.search_string += key.lower()
                 process = True
             elif key == 'Space':
-                self.searchstring += ' '
+                self.search_string += ' '
                 process = True
             elif key == 'Back':
-                self.searchstring = self.searchstring[:-1]
+                self.search_string = self.search_string[:-1]
                 process = True
             if process:
-                self.search.set(self.searchstring)
-                self.search_listbox(self.searchstring)
+                self.search.set(self.search_string)
+                if self.youtube_mode:
+                    # debounce the youtube search on a 0.5s timer
+                    if self.youtube_thread:
+                        self.youtube_thread.cancel()
+                    self.youtube_thread = threading.Timer(0.5, self.search_youtube)
+                    self.youtube_thread.daemon = True
+                    self.youtube_thread.start()
+                else:
+                    self.search_songlist()
 
-        if key == Controls.play_stop:
-            if not self.playlock:
-                self.playlock = True  # when no lock, holding play gives crashes
-                self.root.after(400, self.release_lock)
-                self.play_stop()
+        if key == Controls.toggle_play:
+            if not self.play_lock:
+                self.play_lock = True  # when no lock, holding play gives crashes
+                self.root.after(400, self.release_play_lock)
+                self.toggle_play()
         elif key == Controls.nav_up:
             if self.selected > 0:
-                self.listbox.selection_clear(self.selected)
-                self.selected -= 1
-            self.set_selection()
+                self.set_selection(self.selected - 1)
         elif key == Controls.nav_down:
-            if self.selected < self.listbox.size()-1:
-                self.listbox.selection_clear(self.selected)
-                self.selected += 1
-            self.set_selection()
+            if self.selected < self.listbox.size() - 1:
+                self.set_selection(self.selected + 1)
         elif key == Controls.nav_mult_up:
-            self.listbox.selection_clear(self.selected)
             if self.selected >= Settings.scroll_step - 1:
-                self.selected -= Settings.scroll_step
+                self.set_selection(self.selected - Settings.scroll_step)
             else:
-                self.selected = 0
-            self.set_selection()
+                self.set_selection(0)
         elif key == Controls.nav_mult_down:
-            self.listbox.selection_clear(self.selected)
             if self.selected <= self.listbox.size() - 1 - Settings.scroll_step:
-                self.selected += Settings.scroll_step
+                self.set_selection(self.selected + Settings.scroll_step)
             else:
-                self.selected = self.listbox.size()-1
-            self.set_selection()
+                self.set_selection(self.listbox.size() - 1)
         elif key == Controls.vol_up:
-            self.saved_volume += 1
-            self.p.audio_set_volume(self.saved_volume * 2)
-            self.update_labels()
+            if self.saved_volume < 100:
+                self.saved_volume += 1
+                self.p.audio_set_volume(self.saved_volume * 2)
+                self.update_labels()
         elif key == Controls.vol_down:
-            self.saved_volume -= 1
-            self.p.audio_set_volume(self.saved_volume * 2)
-            self.update_labels()
+            if self.saved_volume > 0:
+                self.saved_volume -= 1
+                self.p.audio_set_volume(self.saved_volume * 2)
+                self.update_labels()
         elif key == Controls.search:
-            self.hide_search() if self.searching else self.show_search()
-        elif key == Controls.show_hide:
-            self.show_hide()
+            self.toggle_search()
+        elif key == Controls.yt_mode:
+            self.toggle_youtube_mode()
+        elif key == Controls.toggle_show:
+            self.toggle_show()
         elif key == Controls.reset:
             self.reset()
         elif key == Controls.quit:
             self.root.quit()
             self.root.destroy()
 
-    def hide_search(self):
-        self.search_box.grid_remove()
-        self.searching = False
-        self.populate_listbox()
-        for entry in self.song_list:
-            if self.searchresult == entry['display']:
-                self.selected = entry['index']
-        self.set_selection()
-        self.searchresult = ''
+    def toggle_search(self):
+        self.hide_search() if self.search_open else self.show_search()
 
     def show_search(self):
+        self.search_open = True
         self.search_box.grid()
-        self.searching = True
         self.show()
-        self.searchstring = ''
-        self.search.set(self.searchstring)
-        self.selected = 0
+        self.search_string = ''
+        self.search.set(self.search_string)
+        self.set_selection(0)
 
-    def play_stop(self):
+    def hide_search(self):
+        self.search_open = False
+        self.search_box.grid_remove()
+        index = self.song_list[self.selected]['index'] if self.song_list else 0
+        self.populate_listbox()
+        self.set_selection(index)
+
+    def toggle_youtube_mode(self):
+        self.youtube_mode_off() if self.youtube_mode else self.youtube_mode_on()
+
+    def youtube_mode_on(self):
+        self.youtube_mode = True
+        self.show_search()
+        self.song_list = []
+        self.populate_listbox()
+        self.button_youtube.config(relief=tk.SUNKEN)
+
+    def youtube_mode_off(self):
+        self.youtube_mode = False
+        self.hide_search()
+        self.populate_song_list()
+        self.populate_listbox()
+        self.button_youtube.config(relief=tk.RAISED)
+
+    def toggle_play(self):
         self.listbox.focus_set()
         self.stop() if self.playing else self.play()
 
     def play(self):
         self.playing = True
-        song = self.listbox.get(tk.ACTIVE)
-        for entry in self.song_list:
-            if song == entry['display']:
-                path = entry['path'] + '/' + entry['filename']
-                path = path.replace('\\', '\\\\')
-                self.p.set_media(self.instance.media_new(path))
-                self.playingname = entry['display']
-                self.p.play()
-                self.root.after(350, self.set_device)  # hackery for some reason...
-                break
+        entry = self.song_list[self.selected]
+
+        if 'path' in entry:
+            # play from file
+            path = entry['path'] + '/' + entry['filename']
+            path = path.replace('\\', '\\\\')
+        else:
+            # play from youtube - get audio stream url
+            vid = pafy.new(f'https://www.youtube.com{entry["url"]}')
+            path = vid.getbestaudio().url
+
+        self.p.set_media(self.instance.media_new(path))
+        self.playing_name = entry['display']
+        self.p.play()
+        self.root.after(350, self.set_device)  # hackery for some reason...
+
         if Settings.hide_on_play:
             self.hide()
-        if self.searching:
+        if self.search_open:
             self.hide_search()
         self.update_labels()
 
     def stop(self):
         self.playing = False
-        self.saved_volume = int(self.p.audio_get_volume() / 2)
         self.p.stop()
         self.instance = vlc.Instance()
         self.p = self.instance.media_player_new()
@@ -343,22 +384,22 @@ class WinDJ:
         self.root.after(10)
         self.p.pause()
 
-    def show_hide(self):
+    def toggle_show(self):
         self.hide() if self.visible else self.show()
 
     def hide(self):
-        self.root.withdraw()
         self.visible = False
+        self.root.withdraw()
 
     def show(self):
+        self.visible = True
         self.root.update()
         self.root.deiconify()
-        self.visible = True
 
     def update_labels(self):
         if self.playing:
             playing = 'Playing'
-            songname = self.playingname
+            songname = self.playing_name
         else:
             playing = 'Stopped'
             songname = '-'
@@ -380,23 +421,29 @@ class WinDJ:
         for entry in self.song_list:
             self.listbox.insert(tk.END, entry['display'])
 
-    def search_listbox(self, searchstring):
-        searchresults = [entry for entry in self.song_list if searchstring in entry['display'].lower()]
+    def search_songlist(self):
+        self.song_list = [entry for entry in self.song_list if self.search_string in entry['display'].lower()]
+        self.populate_listbox()
+        self.set_selection(0)
+
+    def search_youtube(self):
         self.listbox.delete(0, tk.END)
-        for entry in searchresults:
-            self.listbox.insert(tk.END, entry['display'])
-        self.listbox.selection_set(0)
-        self.listbox.activate(0)
-        self.listbox.see(0)
-        self.searchresult = self.listbox.get(tk.ACTIVE)
+        # sp searches for videos only
+        payload = {'search_query': self.search_string, 'sp': 'EgIQAQ%3D%3D'}
+        resp = requests.get('http://www.youtube.com/results', params=payload).text
+        search_results = re.findall(r'<h3.+?href="(.+?)".+?title="(.+?)"', resp)
+        self.song_list = []
+        for idx, result in enumerate(search_results):
+            display = html.unescape(result[1].translate(non_bmp_map))
+            self.song_list.append({'index': idx, 'url': result[0], 'display': display})
+            self.listbox.insert(tk.END, display)
+        self.set_selection(0)
 
     def reset(self):
-        self.p.stop()
-        self.playing = False
-        self.song_list = populate_songs()
-        self.populate_listbox()
-        self.set_selection()
-        self.update_labels()
+        self.stop()
+        self.hide_search()
+        self.youtube_mode_off()
+        self.set_selection(0)
         self.show()
 
 

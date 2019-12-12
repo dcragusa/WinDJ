@@ -8,6 +8,7 @@ WinDJ is an unobtrusive media player for Windows based on VLC. You can use it fo
 - Intuitive default control scheme based on the numpad - but completely customisable controls too
 - Volume control
 - Search function - just type in a few letters and watch your songlist narrow down 
+- YouTube mode - play YouTube music, directly from WinDJ
 - Scrollable and clickable songlist
 - Many program settings can be customised
 - Plays damn near every format - no need to convert any of your files
@@ -67,10 +68,14 @@ If it fixed it has no title bar and is therefore slightly smaller.
 If you wish to micspam as in the instructions above, this must be false to allow the game to register the micspam toggle button.
 - `output_device` is the device code that WinDJ will output audio to. 
 You can comment this out with a `;` if you want WinDJ to output over your default sound output.
+Use `WinDJHelper` to find your audio device codes.
 
 ## Controls
 Most of the controls are self-explanatory. Below are the more complex ones.
 - `reset` stops any songs, and refreshes the songlist. 
 Helpful if for some reason the ingame miscpam toggle and WinDJ get out of sync.
-- `search` opens a search box at the top of the songlist that you can type into. 
+- `search` opens a search box at the top of the songlist that you can type into.
 You can exit the search by pressing the same button again, or it will exit automatically if you play a song.
+- `yt_mode` also opens a search box at the top of the songlist that you can type into.
+This will search YouTube video titles for whatever you type, so you can play music directly from YouTube.
+All other controls for WinDJ (e.g. volume, navigation, etc.) behave the same way in YouTube mode.
