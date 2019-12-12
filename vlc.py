@@ -50,12 +50,13 @@ import functools
 from inspect import getargspec
 
 import logging
+
 logger = logging.getLogger(__name__)
 
-__version__ = "3.0.6109"
-__libvlc_version__ = "3.0.6"
-__generator_version__ = "1.9"
-build_date  = "Sun Mar 31 20:14:16 2019 3.0.6"
+__version__ = "3.0.8111"
+__libvlc_version__ = "3.0.8"
+__generator_version__ = "1.11"
+build_date = "Sun Oct 27 20:26:27 2019 3.0.8"
 
 # The libvlc doc states that filenames are expected to be in UTF8, do
 # not rely on sys.getfilesystemencoding() which will be confused,
@@ -68,6 +69,8 @@ if sys.version_info[0] > 2:
     bytes = bytes
     basestring = (str, bytes)
     PYTHON3 = True
+
+
     def str_to_bytes(s):
         """Translate string or bytes to bytes.
         """
@@ -75,6 +78,7 @@ if sys.version_info[0] > 2:
             return bytes(s, DEFAULT_ENCODING)
         else:
             return s
+
 
     def bytes_to_str(b):
         """Translate bytes to string.
@@ -89,6 +93,8 @@ else:
     bytes = str
     basestring = basestring
     PYTHON3 = False
+
+
     def str_to_bytes(s):
         """Translate string or bytes to bytes.
         """
@@ -96,6 +102,7 @@ else:
             return s.encode(DEFAULT_ENCODING)
         else:
             return s
+
 
     def bytes_to_str(b):
         """Translate bytes to unicode string.
@@ -108,6 +115,7 @@ else:
 # Internal guard to prevent internal classes to be directly
 # instanciated.
 _internal_guard = object()
+
 
 def find_lib():
     dll = None
@@ -149,17 +157,20 @@ def find_lib():
                 programfiles = os.environ["ProgramFiles"]
                 homedir = os.environ["HOMEDRIVE"]
                 for p in ('{programfiles}\\VideoLan{libname}', '{homedir}:\\VideoLan{libname}',
-                          '{programfiles}{libname}',           '{homedir}:{libname}'):
-                    p = p.format(homedir = homedir,
-                                 programfiles = programfiles,
-                                 libname = '\\VLC\\' + libname)
+                          '{programfiles}{libname}', '{homedir}:{libname}'):
+                    p = p.format(homedir=homedir,
+                                 programfiles=programfiles,
+                                 libname='\\VLC\\' + libname)
                     if os.path.exists(p):
                         plugin_path = os.path.dirname(p)
                         break
             if plugin_path is not None:  # try loading
                 p = os.getcwd()
-                os.environ['PATH'] += os.pathsep + plugin_path
+                os.chdir(plugin_path)
+                # if chdir failed, this will raise an exception
                 dll = ctypes.CDLL(libname)
+                # restore cwd after dll has been loaded
+                os.chdir(p)
             else:  # may fail
                 dll = ctypes.CDLL(libname)
         else:
@@ -200,19 +211,23 @@ def find_lib():
 
     return (dll, plugin_path)
 
+
 # plugin_path used on win32 and MacOS in override.py
-dll, plugin_path  = find_lib()
+dll, plugin_path = find_lib()
+
 
 class VLCException(Exception):
     """Exception raised by libvlc methods.
     """
     pass
 
+
 try:
     _Ints = (int, long)
 except NameError:  # no long in Python 3+
-    _Ints =  int
+    _Ints = int
 _Seqs = (list, tuple)
+
 
 # Used for handling *event_manager() methods.
 class memoize_parameterless(object):
@@ -222,6 +237,7 @@ class memoize_parameterless(object):
     (not reevaluated).
     Adapted from https://wiki.python.org/moin/PythonDecoratorLibrary
     """
+
     def __init__(self, func):
         self.func = func
         self._cache = {}
@@ -239,13 +255,15 @@ class memoize_parameterless(object):
         return self.func.__doc__
 
     def __get__(self, obj, objtype):
-      """Support instance methods.
-      """
-      return functools.partial(self.__call__, obj)
+        """Support instance methods.
+        """
+        return functools.partial(self.__call__, obj)
+
 
 # Default instance. It is used to instanciate classes directly in the
 # OO-wrapper.
 _default_instance = None
+
 
 def get_default_instance():
     """Return the default VLC.Instance.
@@ -255,8 +273,20 @@ def get_default_instance():
         _default_instance = Instance()
     return _default_instance
 
+
+def try_fspath(path):
+    """Try calling os.fspath
+    os.fspath is only available from py3.6
+    """
+    try:
+        return os.fspath(path)
+    except (AttributeError, TypeError):
+        return path
+
+
 _Cfunctions = {}  # from LibVLC __version__
 _Globals = globals()  # sys.modules[__name__].__dict__
+
 
 def _Cfunction(name, flags, errcheck, *types):
     """(INTERNAL) New ctypes function binding.
@@ -276,6 +306,7 @@ def _Cfunction(name, flags, errcheck, *types):
         return f
     raise NameError('no function %r' % (name,))
 
+
 def _Cobject(cls, ctype):
     """(INTERNAL) New instance from ctypes.
     """
@@ -283,14 +314,17 @@ def _Cobject(cls, ctype):
     o._as_parameter_ = ctype
     return o
 
+
 def _Constructor(cls, ptr=_internal_guard):
     """(INTERNAL) New wrapper from ctypes.
     """
     if ptr == _internal_guard:
-        raise VLCException("(INTERNAL) ctypes class. You should get references for this class through methods of the LibVLC API.")
+        raise VLCException(
+            "(INTERNAL) ctypes class. You should get references for this class through methods of the LibVLC API.")
     if ptr is None or ptr == 0:
         return None
     return _Cobject(cls, ctypes.c_void_p(ptr))
+
 
 class _Cstruct(ctypes.Structure):
     """(INTERNAL) Base class for ctypes structures.
@@ -304,9 +338,11 @@ class _Cstruct(ctypes.Structure):
     def __repr__(self):
         return '%s.%s' % (self.__class__.__module__, self)
 
+
 class _Ctype(object):
     """(INTERNAL) Base class for ctypes.
     """
+
     @staticmethod
     def from_param(this):  # not self
         """(INTERNAL) ctypes parameter conversion method.
@@ -315,9 +351,11 @@ class _Ctype(object):
             return None
         return this._as_parameter_
 
+
 class ListPOINTER(object):
     """Just like a POINTER but accept a list of etype elements as an argument.
     """
+
     def __init__(self, etype):
         self.etype = etype
 
@@ -326,6 +364,7 @@ class ListPOINTER(object):
             return (self.etype * len(param))(*param)
         else:
             return ctypes.POINTER(param)
+
 
 # errcheck functions for some native functions.
 def string_result(result, func, arguments):
@@ -341,24 +380,33 @@ def string_result(result, func, arguments):
         return s
     return None
 
+
 def class_result(classname):
     """Errcheck function. Returns a function that creates the specified class.
     """
+
     def wrap_errcheck(result, func, arguments):
         if result is None:
             return None
         return classname(result)
+
     return wrap_errcheck
+
 
 # Wrapper for the opaque struct libvlc_log_t
 class Log(ctypes.Structure):
     pass
+
+
 Log_ptr = ctypes.POINTER(Log)
+
 
 # FILE* ctypes wrapper, copied from
 # http://svn.python.org/projects/ctypes/trunk/ctypeslib/ctypeslib/contrib/pythonhdr.py
 class FILE(ctypes.Structure):
     pass
+
+
 FILE_ptr = ctypes.POINTER(FILE)
 
 if PYTHON3:
@@ -371,7 +419,7 @@ if PYTHON3:
                               ctypes.c_char_p,
                               ctypes.c_char_p,
                               ctypes.c_char_p,
-                              ctypes.c_int ]
+                              ctypes.c_int]
 
     PyFile_AsFd = ctypes.pythonapi.PyObject_AsFileDescriptor
     PyFile_AsFd.restype = ctypes.c_int
@@ -388,7 +436,8 @@ else:
     PyFile_AsFile.restype = FILE_ptr
     PyFile_AsFile.argtypes = [ctypes.py_object]
 
- # Generated enum types #
+
+# Generated enum types #
 
 class _Enum(ctypes.c_uint):
     '''(INTERNAL) Base class
@@ -406,11 +455,12 @@ class _Enum(ctypes.c_uint):
         return '.'.join((self.__class__.__module__, self.__str__()))
 
     def __eq__(self, other):
-        return ( (isinstance(other, _Enum) and self.value == other.value)
-              or (isinstance(other, _Ints) and self.value == other) )
+        return ((isinstance(other, _Enum) and self.value == other.value)
+                or (isinstance(other, _Ints) and self.value == other))
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
 
 class LogLevel(_Enum):
     '''Logging messages level.
@@ -422,10 +472,13 @@ class LogLevel(_Enum):
         3: 'WARNING',
         4: 'ERROR',
     }
-LogLevel.DEBUG   = LogLevel(0)
-LogLevel.ERROR   = LogLevel(4)
-LogLevel.NOTICE  = LogLevel(2)
+
+
+LogLevel.DEBUG = LogLevel(0)
+LogLevel.ERROR = LogLevel(4)
+LogLevel.NOTICE = LogLevel(2)
 LogLevel.WARNING = LogLevel(3)
+
 
 class MediaDiscovererCategory(_Enum):
     '''Category of a media discoverer
@@ -437,10 +490,13 @@ See libvlc_media_discoverer_list_get().
         2: 'podcasts',
         3: 'localdirs',
     }
-MediaDiscovererCategory.devices   = MediaDiscovererCategory(0)
-MediaDiscovererCategory.lan       = MediaDiscovererCategory(1)
+
+
+MediaDiscovererCategory.devices = MediaDiscovererCategory(0)
+MediaDiscovererCategory.lan = MediaDiscovererCategory(1)
 MediaDiscovererCategory.localdirs = MediaDiscovererCategory(3)
-MediaDiscovererCategory.podcasts  = MediaDiscovererCategory(2)
+MediaDiscovererCategory.podcasts = MediaDiscovererCategory(2)
+
 
 class DialogQuestionType(_Enum):
     '''@defgroup libvlc_dialog libvlc dialog
@@ -454,9 +510,12 @@ libvlc dialog external api.
         1: 'DIALOG_QUESTION_WARNING',
         2: 'DIALOG_QUESTION_CRITICAL',
     }
+
+
 DialogQuestionType.DIALOG_QUESTION_CRITICAL = DialogQuestionType(2)
-DialogQuestionType.DIALOG_QUESTION_NORMAL   = DialogQuestionType(0)
-DialogQuestionType.DIALOG_QUESTION_WARNING  = DialogQuestionType(1)
+DialogQuestionType.DIALOG_QUESTION_NORMAL = DialogQuestionType(0)
+DialogQuestionType.DIALOG_QUESTION_WARNING = DialogQuestionType(1)
+
 
 class EventType(_Enum):
     '''Event types.
@@ -527,70 +586,73 @@ class EventType(_Enum):
         1545: 'VlmMediaInstanceStatusEnd',
         1546: 'VlmMediaInstanceStatusError',
     }
-EventType.MediaDiscovererEnded          = EventType(1281)
-EventType.MediaDiscovererStarted        = EventType(0x500)
-EventType.MediaDurationChanged          = EventType(2)
-EventType.MediaFreed                    = EventType(4)
-EventType.MediaListEndReached           = EventType(516)
-EventType.MediaListItemAdded            = EventType(0x200)
-EventType.MediaListItemDeleted          = EventType(514)
-EventType.MediaListPlayerNextItemSet    = EventType(1025)
-EventType.MediaListPlayerPlayed         = EventType(0x400)
-EventType.MediaListPlayerStopped        = EventType(1026)
-EventType.MediaListViewItemAdded        = EventType(0x300)
-EventType.MediaListViewItemDeleted      = EventType(770)
-EventType.MediaListViewWillAddItem      = EventType(769)
-EventType.MediaListViewWillDeleteItem   = EventType(771)
-EventType.MediaListWillAddItem          = EventType(513)
-EventType.MediaListWillDeleteItem       = EventType(515)
-EventType.MediaMetaChanged              = EventType(0)
-EventType.MediaParsedChanged            = EventType(3)
-EventType.MediaPlayerAudioDevice        = EventType(284)
-EventType.MediaPlayerAudioVolume        = EventType(283)
-EventType.MediaPlayerBackward           = EventType(264)
-EventType.MediaPlayerBuffering          = EventType(259)
-EventType.MediaPlayerChapterChanged     = EventType(285)
-EventType.MediaPlayerCorked             = EventType(279)
-EventType.MediaPlayerESAdded            = EventType(276)
-EventType.MediaPlayerESDeleted          = EventType(277)
-EventType.MediaPlayerESSelected         = EventType(278)
-EventType.MediaPlayerEncounteredError   = EventType(266)
-EventType.MediaPlayerEndReached         = EventType(265)
-EventType.MediaPlayerForward            = EventType(263)
-EventType.MediaPlayerLengthChanged      = EventType(273)
-EventType.MediaPlayerMediaChanged       = EventType(0x100)
-EventType.MediaPlayerMuted              = EventType(281)
-EventType.MediaPlayerNothingSpecial     = EventType(257)
-EventType.MediaPlayerOpening            = EventType(258)
-EventType.MediaPlayerPausableChanged    = EventType(270)
-EventType.MediaPlayerPaused             = EventType(261)
-EventType.MediaPlayerPlaying            = EventType(260)
-EventType.MediaPlayerPositionChanged    = EventType(268)
-EventType.MediaPlayerScrambledChanged   = EventType(275)
-EventType.MediaPlayerSeekableChanged    = EventType(269)
-EventType.MediaPlayerSnapshotTaken      = EventType(272)
-EventType.MediaPlayerStopped            = EventType(262)
-EventType.MediaPlayerTimeChanged        = EventType(267)
-EventType.MediaPlayerTitleChanged       = EventType(271)
-EventType.MediaPlayerUncorked           = EventType(280)
-EventType.MediaPlayerUnmuted            = EventType(282)
-EventType.MediaPlayerVout               = EventType(274)
-EventType.MediaStateChanged             = EventType(5)
-EventType.MediaSubItemAdded             = EventType(1)
-EventType.MediaSubItemTreeAdded         = EventType(6)
-EventType.RendererDiscovererItemAdded   = EventType(1282)
+
+
+EventType.MediaDiscovererEnded = EventType(1281)
+EventType.MediaDiscovererStarted = EventType(0x500)
+EventType.MediaDurationChanged = EventType(2)
+EventType.MediaFreed = EventType(4)
+EventType.MediaListEndReached = EventType(516)
+EventType.MediaListItemAdded = EventType(0x200)
+EventType.MediaListItemDeleted = EventType(514)
+EventType.MediaListPlayerNextItemSet = EventType(1025)
+EventType.MediaListPlayerPlayed = EventType(0x400)
+EventType.MediaListPlayerStopped = EventType(1026)
+EventType.MediaListViewItemAdded = EventType(0x300)
+EventType.MediaListViewItemDeleted = EventType(770)
+EventType.MediaListViewWillAddItem = EventType(769)
+EventType.MediaListViewWillDeleteItem = EventType(771)
+EventType.MediaListWillAddItem = EventType(513)
+EventType.MediaListWillDeleteItem = EventType(515)
+EventType.MediaMetaChanged = EventType(0)
+EventType.MediaParsedChanged = EventType(3)
+EventType.MediaPlayerAudioDevice = EventType(284)
+EventType.MediaPlayerAudioVolume = EventType(283)
+EventType.MediaPlayerBackward = EventType(264)
+EventType.MediaPlayerBuffering = EventType(259)
+EventType.MediaPlayerChapterChanged = EventType(285)
+EventType.MediaPlayerCorked = EventType(279)
+EventType.MediaPlayerESAdded = EventType(276)
+EventType.MediaPlayerESDeleted = EventType(277)
+EventType.MediaPlayerESSelected = EventType(278)
+EventType.MediaPlayerEncounteredError = EventType(266)
+EventType.MediaPlayerEndReached = EventType(265)
+EventType.MediaPlayerForward = EventType(263)
+EventType.MediaPlayerLengthChanged = EventType(273)
+EventType.MediaPlayerMediaChanged = EventType(0x100)
+EventType.MediaPlayerMuted = EventType(281)
+EventType.MediaPlayerNothingSpecial = EventType(257)
+EventType.MediaPlayerOpening = EventType(258)
+EventType.MediaPlayerPausableChanged = EventType(270)
+EventType.MediaPlayerPaused = EventType(261)
+EventType.MediaPlayerPlaying = EventType(260)
+EventType.MediaPlayerPositionChanged = EventType(268)
+EventType.MediaPlayerScrambledChanged = EventType(275)
+EventType.MediaPlayerSeekableChanged = EventType(269)
+EventType.MediaPlayerSnapshotTaken = EventType(272)
+EventType.MediaPlayerStopped = EventType(262)
+EventType.MediaPlayerTimeChanged = EventType(267)
+EventType.MediaPlayerTitleChanged = EventType(271)
+EventType.MediaPlayerUncorked = EventType(280)
+EventType.MediaPlayerUnmuted = EventType(282)
+EventType.MediaPlayerVout = EventType(274)
+EventType.MediaStateChanged = EventType(5)
+EventType.MediaSubItemAdded = EventType(1)
+EventType.MediaSubItemTreeAdded = EventType(6)
+EventType.RendererDiscovererItemAdded = EventType(1282)
 EventType.RendererDiscovererItemDeleted = EventType(1283)
-EventType.VlmMediaAdded                 = EventType(0x600)
-EventType.VlmMediaChanged               = EventType(1538)
-EventType.VlmMediaInstanceStarted       = EventType(1539)
-EventType.VlmMediaInstanceStatusEnd     = EventType(1545)
-EventType.VlmMediaInstanceStatusError   = EventType(1546)
-EventType.VlmMediaInstanceStatusInit    = EventType(1541)
+EventType.VlmMediaAdded = EventType(0x600)
+EventType.VlmMediaChanged = EventType(1538)
+EventType.VlmMediaInstanceStarted = EventType(1539)
+EventType.VlmMediaInstanceStatusEnd = EventType(1545)
+EventType.VlmMediaInstanceStatusError = EventType(1546)
+EventType.VlmMediaInstanceStatusInit = EventType(1541)
 EventType.VlmMediaInstanceStatusOpening = EventType(1542)
-EventType.VlmMediaInstanceStatusPause   = EventType(1544)
+EventType.VlmMediaInstanceStatusPause = EventType(1544)
 EventType.VlmMediaInstanceStatusPlaying = EventType(1543)
-EventType.VlmMediaInstanceStopped       = EventType(1540)
-EventType.VlmMediaRemoved               = EventType(1537)
+EventType.VlmMediaInstanceStopped = EventType(1540)
+EventType.VlmMediaRemoved = EventType(1537)
+
 
 class Meta(_Enum):
     '''Meta data types.
@@ -623,32 +685,35 @@ class Meta(_Enum):
         24: 'DiscNumber',
         25: 'DiscTotal',
     }
-Meta.Actors      = Meta(22)
-Meta.Album       = Meta(4)
+
+
+Meta.Actors = Meta(22)
+Meta.Album = Meta(4)
 Meta.AlbumArtist = Meta(23)
-Meta.Artist      = Meta(1)
-Meta.ArtworkURL  = Meta(15)
-Meta.Copyright   = Meta(3)
-Meta.Date        = Meta(8)
+Meta.Artist = Meta(1)
+Meta.ArtworkURL = Meta(15)
+Meta.Copyright = Meta(3)
+Meta.Date = Meta(8)
 Meta.Description = Meta(6)
-Meta.Director    = Meta(18)
-Meta.DiscNumber  = Meta(24)
-Meta.DiscTotal   = Meta(25)
-Meta.EncodedBy   = Meta(14)
-Meta.Episode     = Meta(20)
-Meta.Genre       = Meta(2)
-Meta.Language    = Meta(11)
-Meta.NowPlaying  = Meta(12)
-Meta.Publisher   = Meta(13)
-Meta.Rating      = Meta(7)
-Meta.Season      = Meta(19)
-Meta.Setting     = Meta(9)
-Meta.ShowName    = Meta(21)
-Meta.Title       = Meta(0)
-Meta.TrackID     = Meta(16)
+Meta.Director = Meta(18)
+Meta.DiscNumber = Meta(24)
+Meta.DiscTotal = Meta(25)
+Meta.EncodedBy = Meta(14)
+Meta.Episode = Meta(20)
+Meta.Genre = Meta(2)
+Meta.Language = Meta(11)
+Meta.NowPlaying = Meta(12)
+Meta.Publisher = Meta(13)
+Meta.Rating = Meta(7)
+Meta.Season = Meta(19)
+Meta.Setting = Meta(9)
+Meta.ShowName = Meta(21)
+Meta.Title = Meta(0)
+Meta.TrackID = Meta(16)
 Meta.TrackNumber = Meta(5)
-Meta.TrackTotal  = Meta(17)
-Meta.URL         = Meta(10)
+Meta.TrackTotal = Meta(17)
+Meta.URL = Meta(10)
+
 
 class State(_Enum):
     '''Note the order of libvlc_state_t enum must match exactly the order of
@@ -668,14 +733,17 @@ stopping=5, ended=6, error=7.
         6: 'Ended',
         7: 'Error',
     }
-State.Buffering      = State(2)
-State.Ended          = State(6)
-State.Error          = State(7)
+
+
+State.Buffering = State(2)
+State.Ended = State(6)
+State.Error = State(7)
 State.NothingSpecial = State(0)
-State.Opening        = State(1)
-State.Paused         = State(4)
-State.Playing        = State(3)
-State.Stopped        = State(5)
+State.Opening = State(1)
+State.Paused = State(4)
+State.Playing = State(3)
+State.Stopped = State(5)
+
 
 class TrackType(_Enum):
     '''N/A
@@ -686,10 +754,13 @@ class TrackType(_Enum):
         1: 'video',
         2: 'ext',
     }
-TrackType.audio   = TrackType(0)
-TrackType.ext     = TrackType(2)
+
+
+TrackType.audio = TrackType(0)
+TrackType.ext = TrackType(2)
 TrackType.unknown = TrackType(-1)
-TrackType.video   = TrackType(1)
+TrackType.video = TrackType(1)
+
 
 class VideoOrient(_Enum):
     '''N/A
@@ -704,14 +775,17 @@ class VideoOrient(_Enum):
         6: 'right_top',
         7: 'right_bottom',
     }
-VideoOrient.bottom_left  = VideoOrient(2)
+
+
+VideoOrient.bottom_left = VideoOrient(2)
 VideoOrient.bottom_right = VideoOrient(3)
-VideoOrient.left_bottom  = VideoOrient(5)
-VideoOrient.left_top     = VideoOrient(4)
+VideoOrient.left_bottom = VideoOrient(5)
+VideoOrient.left_top = VideoOrient(4)
 VideoOrient.right_bottom = VideoOrient(7)
-VideoOrient.right_top    = VideoOrient(6)
-VideoOrient.top_left     = VideoOrient(0)
-VideoOrient.top_right    = VideoOrient(1)
+VideoOrient.right_top = VideoOrient(6)
+VideoOrient.top_left = VideoOrient(0)
+VideoOrient.top_right = VideoOrient(1)
+
 
 class VideoProjection(_Enum):
     '''N/A
@@ -721,9 +795,12 @@ class VideoProjection(_Enum):
         1: 'equirectangular',
         0x100: 'cubemap_layout_standard',
     }
+
+
 VideoProjection.cubemap_layout_standard = VideoProjection(0x100)
-VideoProjection.equirectangular         = VideoProjection(1)
-VideoProjection.rectangular             = VideoProjection(0)
+VideoProjection.equirectangular = VideoProjection(1)
+VideoProjection.rectangular = VideoProjection(0)
+
 
 class MediaType(_Enum):
     '''Media type
@@ -737,12 +814,15 @@ See libvlc_media_get_type.
         4: 'stream',
         5: 'playlist',
     }
+
+
 MediaType.directory = MediaType(2)
-MediaType.disc      = MediaType(3)
-MediaType.file      = MediaType(1)
-MediaType.playlist  = MediaType(5)
-MediaType.stream    = MediaType(4)
-MediaType.unknown   = MediaType(0)
+MediaType.disc = MediaType(3)
+MediaType.file = MediaType(1)
+MediaType.playlist = MediaType(5)
+MediaType.stream = MediaType(4)
+MediaType.unknown = MediaType(0)
+
 
 class MediaParseFlag(_Enum):
     '''Parse flags used by libvlc_media_parse_with_options()
@@ -755,11 +835,14 @@ See libvlc_media_parse_with_options.
         0x4: 'fetch_network',
         0x8: 'do_interact',
     }
-MediaParseFlag.do_interact   = MediaParseFlag(0x8)
-MediaParseFlag.fetch_local   = MediaParseFlag(0x2)
+
+
+MediaParseFlag.do_interact = MediaParseFlag(0x8)
+MediaParseFlag.fetch_local = MediaParseFlag(0x2)
 MediaParseFlag.fetch_network = MediaParseFlag(0x4)
-MediaParseFlag.local         = MediaParseFlag(0x0)
-MediaParseFlag.network       = MediaParseFlag(0x1)
+MediaParseFlag.local = MediaParseFlag(0x0)
+MediaParseFlag.network = MediaParseFlag(0x1)
+
 
 class MediaParsedStatus(_Enum):
     '''Parse status used sent by libvlc_media_parse_with_options() or returned by
@@ -773,10 +856,13 @@ See libvlc_media_get_parsed_status.
         3: 'timeout',
         4: 'done',
     }
-MediaParsedStatus.done    = MediaParsedStatus(4)
-MediaParsedStatus.failed  = MediaParsedStatus(2)
+
+
+MediaParsedStatus.done = MediaParsedStatus(4)
+MediaParsedStatus.failed = MediaParsedStatus(2)
 MediaParsedStatus.skipped = MediaParsedStatus(1)
 MediaParsedStatus.timeout = MediaParsedStatus(3)
+
 
 class MediaSlaveType(_Enum):
     '''Type of a media slave: subtitle or audio.
@@ -785,8 +871,11 @@ class MediaSlaveType(_Enum):
         0: 'subtitle',
         1: 'audio',
     }
-MediaSlaveType.audio    = MediaSlaveType(1)
+
+
+MediaSlaveType.audio = MediaSlaveType(1)
 MediaSlaveType.subtitle = MediaSlaveType(0)
+
 
 class VideoMarqueeOption(_Enum):
     '''Marq options definition.
@@ -800,19 +889,22 @@ class VideoMarqueeOption(_Enum):
         5: 'Refresh',
         6: 'Size',
         7: 'Timeout',
-        8: 'marquee_X',
-        9: 'marquee_Y',
+        8: 'X',
+        9: 'Y',
     }
-VideoMarqueeOption.Color     = VideoMarqueeOption(2)
-VideoMarqueeOption.Enable    = VideoMarqueeOption(0)
-VideoMarqueeOption.Opacity   = VideoMarqueeOption(3)
-VideoMarqueeOption.Position  = VideoMarqueeOption(4)
-VideoMarqueeOption.Refresh   = VideoMarqueeOption(5)
-VideoMarqueeOption.Size      = VideoMarqueeOption(6)
-VideoMarqueeOption.Text      = VideoMarqueeOption(1)
-VideoMarqueeOption.Timeout   = VideoMarqueeOption(7)
-VideoMarqueeOption.marquee_X = VideoMarqueeOption(8)
-VideoMarqueeOption.marquee_Y = VideoMarqueeOption(9)
+
+
+VideoMarqueeOption.Color = VideoMarqueeOption(2)
+VideoMarqueeOption.Enable = VideoMarqueeOption(0)
+VideoMarqueeOption.Opacity = VideoMarqueeOption(3)
+VideoMarqueeOption.Position = VideoMarqueeOption(4)
+VideoMarqueeOption.Refresh = VideoMarqueeOption(5)
+VideoMarqueeOption.Size = VideoMarqueeOption(6)
+VideoMarqueeOption.Text = VideoMarqueeOption(1)
+VideoMarqueeOption.Timeout = VideoMarqueeOption(7)
+VideoMarqueeOption.X = VideoMarqueeOption(8)
+VideoMarqueeOption.Y = VideoMarqueeOption(9)
+
 
 class NavigateMode(_Enum):
     '''Navigation mode.
@@ -825,12 +917,15 @@ class NavigateMode(_Enum):
         4: 'right',
         5: 'popup',
     }
+
+
 NavigateMode.activate = NavigateMode(0)
-NavigateMode.down     = NavigateMode(2)
-NavigateMode.left     = NavigateMode(3)
-NavigateMode.popup    = NavigateMode(5)
-NavigateMode.right    = NavigateMode(4)
-NavigateMode.up       = NavigateMode(1)
+NavigateMode.down = NavigateMode(2)
+NavigateMode.left = NavigateMode(3)
+NavigateMode.popup = NavigateMode(5)
+NavigateMode.right = NavigateMode(4)
+NavigateMode.up = NavigateMode(1)
+
 
 class Position(_Enum):
     '''Enumeration of values used to set position (e.g. of video title).
@@ -847,16 +942,19 @@ class Position(_Enum):
         7: 'bottom_left',
         8: 'bottom_right',
     }
-Position.bottom       = Position(6)
-Position.bottom_left  = Position(7)
+
+
+Position.bottom = Position(6)
+Position.bottom_left = Position(7)
 Position.bottom_right = Position(8)
-Position.center       = Position(0)
-Position.disable      = Position(-1)
-Position.left         = Position(1)
-Position.right        = Position(2)
-Position.top          = Position(3)
-Position.top_left     = Position(4)
-Position.top_right    = Position(5)
+Position.center = Position(0)
+Position.disable = Position(-1)
+Position.left = Position(1)
+Position.right = Position(2)
+Position.top = Position(3)
+Position.top_left = Position(4)
+Position.top_right = Position(5)
+
 
 class TeletextKey(_Enum):
     '''Enumeration of teletext keys than can be passed via
@@ -869,11 +967,14 @@ libvlc_video_set_teletext().
         6422528: 'blue',
         6881280: 'index',
     }
-TeletextKey.blue   = TeletextKey(6422528)
-TeletextKey.green  = TeletextKey(6750208)
-TeletextKey.index  = TeletextKey(6881280)
-TeletextKey.red    = TeletextKey(7471104)
+
+
+TeletextKey.blue = TeletextKey(6422528)
+TeletextKey.green = TeletextKey(6750208)
+TeletextKey.index = TeletextKey(6881280)
+TeletextKey.red = TeletextKey(7471104)
 TeletextKey.yellow = TeletextKey(7929856)
+
 
 class VideoLogoOption(_Enum):
     '''Option values for libvlc_video_{get,set}_logo_{int,string}.
@@ -888,14 +989,17 @@ class VideoLogoOption(_Enum):
         6: 'logo_opacity',
         7: 'logo_position',
     }
-VideoLogoOption.logo_delay    = VideoLogoOption(4)
-VideoLogoOption.logo_enable   = VideoLogoOption(0)
-VideoLogoOption.logo_file     = VideoLogoOption(1)
-VideoLogoOption.logo_opacity  = VideoLogoOption(6)
+
+
+VideoLogoOption.logo_delay = VideoLogoOption(4)
+VideoLogoOption.logo_enable = VideoLogoOption(0)
+VideoLogoOption.logo_file = VideoLogoOption(1)
+VideoLogoOption.logo_opacity = VideoLogoOption(6)
 VideoLogoOption.logo_position = VideoLogoOption(7)
-VideoLogoOption.logo_repeat   = VideoLogoOption(5)
-VideoLogoOption.logo_x        = VideoLogoOption(2)
-VideoLogoOption.logo_y        = VideoLogoOption(3)
+VideoLogoOption.logo_repeat = VideoLogoOption(5)
+VideoLogoOption.logo_x = VideoLogoOption(2)
+VideoLogoOption.logo_y = VideoLogoOption(3)
+
 
 class VideoAdjustOption(_Enum):
     '''Option values for libvlc_video_{get,set}_adjust_{int,float,bool}.
@@ -908,12 +1012,15 @@ class VideoAdjustOption(_Enum):
         4: 'Saturation',
         5: 'Gamma',
     }
+
+
 VideoAdjustOption.Brightness = VideoAdjustOption(2)
-VideoAdjustOption.Contrast   = VideoAdjustOption(1)
-VideoAdjustOption.Enable     = VideoAdjustOption(0)
-VideoAdjustOption.Gamma      = VideoAdjustOption(5)
-VideoAdjustOption.Hue        = VideoAdjustOption(3)
+VideoAdjustOption.Contrast = VideoAdjustOption(1)
+VideoAdjustOption.Enable = VideoAdjustOption(0)
+VideoAdjustOption.Gamma = VideoAdjustOption(5)
+VideoAdjustOption.Hue = VideoAdjustOption(3)
 VideoAdjustOption.Saturation = VideoAdjustOption(4)
+
 
 class AudioOutputDeviceTypes(_Enum):
     '''Audio device types.
@@ -929,15 +1036,18 @@ class AudioOutputDeviceTypes(_Enum):
         8: '_7_1',
         10: 'SPDIF',
     }
-AudioOutputDeviceTypes.Error  = AudioOutputDeviceTypes(-1)
-AudioOutputDeviceTypes.Mono   = AudioOutputDeviceTypes(1)
-AudioOutputDeviceTypes.SPDIF  = AudioOutputDeviceTypes(10)
+
+
+AudioOutputDeviceTypes.Error = AudioOutputDeviceTypes(-1)
+AudioOutputDeviceTypes.Mono = AudioOutputDeviceTypes(1)
+AudioOutputDeviceTypes.SPDIF = AudioOutputDeviceTypes(10)
 AudioOutputDeviceTypes.Stereo = AudioOutputDeviceTypes(2)
-AudioOutputDeviceTypes._2F2R  = AudioOutputDeviceTypes(4)
-AudioOutputDeviceTypes._3F2R  = AudioOutputDeviceTypes(5)
-AudioOutputDeviceTypes._5_1   = AudioOutputDeviceTypes(6)
-AudioOutputDeviceTypes._6_1   = AudioOutputDeviceTypes(7)
-AudioOutputDeviceTypes._7_1   = AudioOutputDeviceTypes(8)
+AudioOutputDeviceTypes._2F2R = AudioOutputDeviceTypes(4)
+AudioOutputDeviceTypes._3F2R = AudioOutputDeviceTypes(5)
+AudioOutputDeviceTypes._5_1 = AudioOutputDeviceTypes(6)
+AudioOutputDeviceTypes._6_1 = AudioOutputDeviceTypes(7)
+AudioOutputDeviceTypes._7_1 = AudioOutputDeviceTypes(8)
+
 
 class AudioOutputChannel(_Enum):
     '''Audio channels.
@@ -950,12 +1060,15 @@ class AudioOutputChannel(_Enum):
         4: 'Right',
         5: 'Dolbys',
     }
-AudioOutputChannel.Dolbys  = AudioOutputChannel(5)
-AudioOutputChannel.Error   = AudioOutputChannel(-1)
-AudioOutputChannel.Left    = AudioOutputChannel(3)
+
+
+AudioOutputChannel.Dolbys = AudioOutputChannel(5)
+AudioOutputChannel.Error = AudioOutputChannel(-1)
+AudioOutputChannel.Left = AudioOutputChannel(3)
 AudioOutputChannel.RStereo = AudioOutputChannel(2)
-AudioOutputChannel.Right   = AudioOutputChannel(4)
-AudioOutputChannel.Stereo  = AudioOutputChannel(1)
+AudioOutputChannel.Right = AudioOutputChannel(4)
+AudioOutputChannel.Stereo = AudioOutputChannel(1)
+
 
 class MediaPlayerRole(_Enum):
     '''Media player roles.
@@ -974,16 +1087,19 @@ see \ref libvlc_media_player_set_role().
         8: 'Accessibility',
         9: 'Test',
     }
+
+
 MediaPlayerRole.Accessibility = MediaPlayerRole(8)
-MediaPlayerRole.Animation     = MediaPlayerRole(6)
+MediaPlayerRole.Animation = MediaPlayerRole(6)
 MediaPlayerRole.Communication = MediaPlayerRole(3)
-MediaPlayerRole.Game          = MediaPlayerRole(4)
-MediaPlayerRole.Music         = MediaPlayerRole(1)
-MediaPlayerRole.Notification  = MediaPlayerRole(5)
-MediaPlayerRole.Production    = MediaPlayerRole(7)
-MediaPlayerRole.Test          = MediaPlayerRole(9)
-MediaPlayerRole.Video         = MediaPlayerRole(2)
-MediaPlayerRole._None         = MediaPlayerRole(0)
+MediaPlayerRole.Game = MediaPlayerRole(4)
+MediaPlayerRole.Music = MediaPlayerRole(1)
+MediaPlayerRole.Notification = MediaPlayerRole(5)
+MediaPlayerRole.Production = MediaPlayerRole(7)
+MediaPlayerRole.Test = MediaPlayerRole(9)
+MediaPlayerRole.Video = MediaPlayerRole(2)
+MediaPlayerRole._None = MediaPlayerRole(0)
+
 
 class PlaybackMode(_Enum):
     '''Defines playback modes for playlist.
@@ -993,15 +1109,404 @@ class PlaybackMode(_Enum):
         1: 'loop',
         2: 'repeat',
     }
-PlaybackMode.default = PlaybackMode(0)
-PlaybackMode.loop    = PlaybackMode(1)
-PlaybackMode.repeat  = PlaybackMode(2)
 
+
+PlaybackMode.default = PlaybackMode(0)
+PlaybackMode.loop = PlaybackMode(1)
+PlaybackMode.repeat = PlaybackMode(2)
+
+
+# End of generated enum types #
+
+# From libvlc_structures.h
+
+class AudioOutput(_Cstruct):
+
+    def __str__(self):
+        return '%s(%s:%s)' % (self.__class__.__name__, self.name, self.description)
+
+
+AudioOutput._fields_ = [  # recursive struct
+    ('name', ctypes.c_char_p),
+    ('description', ctypes.c_char_p),
+    ('next', ctypes.POINTER(AudioOutput)),
+]
+
+
+class LogMessage(_Cstruct):
+    _fields_ = [
+        ('size', ctypes.c_uint),
+        ('severity', ctypes.c_int),
+        ('type', ctypes.c_char_p),
+        ('name', ctypes.c_char_p),
+        ('header', ctypes.c_char_p),
+        ('message', ctypes.c_char_p),
+    ]
+
+    def __init__(self):
+        super(LogMessage, self).__init__()
+        self.size = ctypes.sizeof(self)
+
+    def __str__(self):
+        return '%s(%d:%s): %s' % (self.__class__.__name__, self.severity, self.type, self.message)
+
+
+class MediaEvent(_Cstruct):
+    _fields_ = [
+        ('media_name', ctypes.c_char_p),
+        ('instance_name', ctypes.c_char_p),
+    ]
+
+
+class MediaStats(_Cstruct):
+    _fields_ = [
+        ('read_bytes', ctypes.c_int),
+        ('input_bitrate', ctypes.c_float),
+        ('demux_read_bytes', ctypes.c_int),
+        ('demux_bitrate', ctypes.c_float),
+        ('demux_corrupted', ctypes.c_int),
+        ('demux_discontinuity', ctypes.c_int),
+        ('decoded_video', ctypes.c_int),
+        ('decoded_audio', ctypes.c_int),
+        ('displayed_pictures', ctypes.c_int),
+        ('lost_pictures', ctypes.c_int),
+        ('played_abuffers', ctypes.c_int),
+        ('lost_abuffers', ctypes.c_int),
+        ('sent_packets', ctypes.c_int),
+        ('sent_bytes', ctypes.c_int),
+        ('send_bitrate', ctypes.c_float),
+    ]
+
+
+class MediaTrackInfo(_Cstruct):
+    _fields_ = [
+        ('codec', ctypes.c_uint32),
+        ('id', ctypes.c_int),
+        ('type', TrackType),
+        ('profile', ctypes.c_int),
+        ('level', ctypes.c_int),
+        ('channels_or_height', ctypes.c_uint),
+        ('rate_or_width', ctypes.c_uint),
+    ]
+
+
+class AudioTrack(_Cstruct):
+    _fields_ = [
+        ('channels', ctypes.c_uint),
+        ('rate', ctypes.c_uint),
+    ]
+
+
+class VideoTrack(_Cstruct):
+    _fields_ = [
+        ('height', ctypes.c_uint),
+        ('width', ctypes.c_uint),
+        ('sar_num', ctypes.c_uint),
+        ('sar_den', ctypes.c_uint),
+        ('frame_rate_num', ctypes.c_uint),
+        ('frame_rate_den', ctypes.c_uint),
+    ]
+
+
+class SubtitleTrack(_Cstruct):
+    _fields_ = [
+        ('encoding', ctypes.c_char_p),
+    ]
+
+
+class MediaTrackTracks(ctypes.Union):
+    _fields_ = [
+        ('audio', ctypes.POINTER(AudioTrack)),
+        ('video', ctypes.POINTER(VideoTrack)),
+        ('subtitle', ctypes.POINTER(SubtitleTrack)),
+    ]
+
+
+class MediaTrack(_Cstruct):
+    _anonymous_ = ("u",)
+    _fields_ = [
+        ('codec', ctypes.c_uint32),
+        ('original_fourcc', ctypes.c_uint32),
+        ('id', ctypes.c_int),
+        ('type', TrackType),
+        ('profile', ctypes.c_int),
+        ('level', ctypes.c_int),
+
+        ('u', MediaTrackTracks),
+        ('bitrate', ctypes.c_uint),
+        ('language', ctypes.c_char_p),
+        ('description', ctypes.c_char_p),
+    ]
+
+
+class PlaylistItem(_Cstruct):
+    _fields_ = [
+        ('id', ctypes.c_int),
+        ('uri', ctypes.c_char_p),
+        ('name', ctypes.c_char_p),
+    ]
+
+    def __str__(self):
+        return '%s #%d %s (uri %s)' % (self.__class__.__name__, self.id, self.name, self.uri)
+
+
+class Position(object):
+    """Enum-like, immutable window position constants.
+
+       See e.g. VideoMarqueeOption.Position.
+    """
+    Center = 0
+    Left = 1
+    CenterLeft = 1
+    Right = 2
+    CenterRight = 2
+    Top = 4
+    TopCenter = 4
+    TopLeft = 5
+    TopRight = 6
+    Bottom = 8
+    BottomCenter = 8
+    BottomLeft = 9
+    BottomRight = 10
+
+    def __init__(self, *unused):
+        raise TypeError('constants only')
+
+    def __setattr__(self, *unused):  # PYCHOK expected
+        raise TypeError('immutable constants')
+
+
+class Rectangle(_Cstruct):
+    _fields_ = [
+        ('top', ctypes.c_int),
+        ('left', ctypes.c_int),
+        ('bottom', ctypes.c_int),
+        ('right', ctypes.c_int),
+    ]
+
+
+class TrackDescription(_Cstruct):
+
+    def __str__(self):
+        return '%s(%d:%s)' % (self.__class__.__name__, self.id, self.name)
+
+
+TrackDescription._fields_ = [  # recursive struct
+    ('id', ctypes.c_int),
+    ('name', ctypes.c_char_p),
+    ('next', ctypes.POINTER(TrackDescription)),
+]
+
+
+def track_description_list(head):
+    """Convert a TrackDescription linked list to a Python list (and release the former).
+    """
+    r = []
+    if head:
+        item = head
+        while item:
+            item = item.contents
+            r.append((item.id, item.name))
+            item = item.next
+        try:
+            libvlc_track_description_release(head)
+        except NameError:
+            libvlc_track_description_list_release(head)
+
+    return r
+
+
+class EventUnion(ctypes.Union):
+    _fields_ = [
+        ('meta_type', ctypes.c_uint),
+        ('new_child', ctypes.c_uint),
+        ('new_duration', ctypes.c_longlong),
+        ('new_status', ctypes.c_int),
+        ('media', ctypes.c_void_p),
+        ('new_state', ctypes.c_uint),
+        # FIXME: Media instance
+        ('new_cache', ctypes.c_float),
+        ('new_position', ctypes.c_float),
+        ('new_time', ctypes.c_longlong),
+        ('new_title', ctypes.c_int),
+        ('new_seekable', ctypes.c_longlong),
+        ('new_pausable', ctypes.c_longlong),
+        ('new_scrambled', ctypes.c_longlong),
+        ('new_count', ctypes.c_longlong),
+        # FIXME: Skipped MediaList and MediaListView...
+        ('filename', ctypes.c_char_p),
+        ('new_length', ctypes.c_longlong),
+        ('media_event', MediaEvent),
+    ]
+
+
+class Event(_Cstruct):
+    _fields_ = [
+        ('type', EventType),
+        ('object', ctypes.c_void_p),
+        ('u', EventUnion),
+    ]
+
+
+class ModuleDescription(_Cstruct):
+
+    def __str__(self):
+        return '%s %s (%s)' % (self.__class__.__name__, self.shortname, self.name)
+
+
+ModuleDescription._fields_ = [  # recursive struct
+    ('name', ctypes.c_char_p),
+    ('shortname', ctypes.c_char_p),
+    ('longname', ctypes.c_char_p),
+    ('help', ctypes.c_char_p),
+    ('next', ctypes.POINTER(ModuleDescription)),
+]
+
+
+def module_description_list(head):
+    """Convert a ModuleDescription linked list to a Python list (and release the former).
+    """
+    r = []
+    if head:
+        item = head
+        while item:
+            item = item.contents
+            r.append((item.name, item.shortname, item.longname, item.help))
+            item = item.next
+        libvlc_module_description_list_release(head)
+    return r
+
+
+class AudioOutputDevice(_Cstruct):
+
+    def __str__(self):
+        return '%s(%d:%s)' % (self.__class__.__name__, self.id, self.name)
+
+
+AudioOutputDevice._fields_ = [  # recursive struct
+    ('next', ctypes.POINTER(AudioOutputDevice)),
+    ('device', ctypes.c_char_p),
+    ('description', ctypes.c_char_p),
+]
+
+
+class TitleDescription(_Cstruct):
+    _fields_ = [
+        ('duration', ctypes.c_longlong),
+        ('name', ctypes.c_char_p),
+        ('menu', ctypes.c_bool),
+    ]
+
+
+class ChapterDescription(_Cstruct):
+    _fields_ = [
+        ('time_offset', ctypes.c_longlong),
+        ('duration', ctypes.c_longlong),
+        ('name', ctypes.c_char_p),
+    ]
+
+
+class VideoViewpoint(_Cstruct):
+    _fields_ = [
+        ('yaw', ctypes.c_float),
+        ('pitch', ctypes.c_float),
+        ('roll', ctypes.c_float),
+        ('field_of_view', ctypes.c_float),
+    ]
+
+
+class MediaDiscovererDescription(_Cstruct):
+    _fields_ = [
+        ('name', ctypes.c_char_p),
+        ('longname', ctypes.c_char_p),
+        ('cat', MediaDiscovererCategory),
+    ]
+
+    def __str__(self):
+        return '%s %s (%d) - %s' % (self.__class__.__name__, self.name, self.cat, self.longname)
+
+
+# This struct depends on the MediaSlaveType enum that is defined only
+# in > 2.2
+if 'MediaSlaveType' in locals():
+    class MediaSlave(_Cstruct):
+        _fields_ = [
+            ('psz_uri', ctypes.c_char_p),
+            ('i_type', MediaSlaveType),
+            ('i_priority', ctypes.c_uint)
+        ]
+
+
+class RDDescription(_Cstruct):
+    _fields_ = [
+        ('name', ctypes.c_char_p),
+        ('longname', ctypes.c_char_p)
+    ]
+
+
+class MediaThumbnailRequest:
+    def __new__(cls, *args):
+        if len(args) == 1 and isinstance(args[0], _Ints):
+            return _Constructor(cls, args[0])
+
+
+class Direct3dDeviceSetup(_Cstruct):
+    _fields_ = [
+        ('device_context', ctypes.c_void_p),
+    ]
+
+
+class Direct3dDeviceCfg(_Cstruct):
+    _fields_ = [
+        ('hardware_decoding', ctypes.c_bool),
+    ]
+
+
+class Direct3dCfg(_Cstruct):
+    _fields_ = [
+        ('width', ctypes.c_uint),
+        ('height', ctypes.c_uint),
+        ('bitdepth', ctypes.c_uint),
+        ('full_range', ctypes.c_bool),
+        # FIXME: should be references to enums
+        ('colorspace', ctypes.c_uint),
+        ('primaries', ctypes.c_uint),
+        ('transfer', ctypes.c_uint),
+    ]
+
+
+class VideoOutputCfg(_Cstruct):
+    _fields_ = [
+        ('surface_format', ctypes.c_int),
+        ('full_range', ctypes.c_bool),
+        # FIXME: should be references to enums
+        ('colorspace', ctypes.c_uint),
+        ('primaries', ctypes.c_uint),
+        ('transfer', ctypes.c_uint),
+    ]
+
+
+class Direct3dHdr10Metadata(_Cstruct):
+    _fields_ = [
+        ('RedPrimary ', ctypes.c_uint16 * 2),
+        ('GreenPrimary', ctypes.c_uint16 * 2),
+        ('BluePrimary', ctypes.c_uint16 * 2),
+        ('WhitePoint', ctypes.c_uint16 * 2),
+        ('MaxMasteringLuminance', ctypes.c_uint),
+        ('MinMasteringLuminance', ctypes.c_uint),
+        ('MaxContentLightLevel', ctypes.c_uint16),
+        ('MaxFrameAverageLightLevel', ctypes.c_uint16),
+    ]
+
+
+# Generated callback definitions #
 class Callback(ctypes.c_void_p):
     """Callback function notification.
     @param p_event: the event triggering the callback.
     """
     pass
+
+
 class LogCb(ctypes.c_void_p):
     """Callback prototype for LibVLC log message handler.
     @param data: data pointer as given to L{libvlc_log_set}().
@@ -1011,6 +1516,8 @@ class LogCb(ctypes.c_void_p):
     @param args: variable argument list for the format @note Log message handlers B{must} be thread-safe. @warning The message context pointer, the format string parameters and the variable arguments are only valid until the callback returns.
     """
     pass
+
+
 class MediaOpenCb(ctypes.c_void_p):
     """Callback prototype to open a custom bitstream input media.
     The same media item can be opened multiple times. Each time, this callback
@@ -1021,6 +1528,8 @@ class MediaOpenCb(ctypes.c_void_p):
     @return: datap storage space for a private data pointer, sizep byte length of the bitstream or UINT64_MAX if unknown.
     """
     pass
+
+
 class MediaReadCb(ctypes.c_void_p):
     """Callback prototype to read data from a custom bitstream input media.
     @param opaque: private pointer as set by the @ref libvlc_media_open_cb callback.
@@ -1029,6 +1538,8 @@ class MediaReadCb(ctypes.c_void_p):
     @return: strictly positive number of bytes read, 0 on end-of-stream, or -1 on non-recoverable error @note If no data is immediately available, then the callback should sleep. @warning The application is responsible for avoiding deadlock situations. In particular, the callback should return an error if playback is stopped; if it does not return, then L{libvlc_media_player_stop}() will never return.
     """
     pass
+
+
 class MediaSeekCb(ctypes.c_void_p):
     """Callback prototype to seek a custom bitstream input media.
     @param opaque: private pointer as set by the @ref libvlc_media_open_cb callback.
@@ -1036,11 +1547,15 @@ class MediaSeekCb(ctypes.c_void_p):
     @return: 0 on success, -1 on error.
     """
     pass
+
+
 class MediaCloseCb(ctypes.c_void_p):
     """Callback prototype to close a custom bitstream input media.
     @param opaque: private pointer as set by the @ref libvlc_media_open_cb callback.
     """
     pass
+
+
 class VideoLockCb(ctypes.c_void_p):
     """Callback prototype to allocate and lock a picture buffer.
     Whenever a new video frame needs to be decoded, the lock callback is
@@ -1052,6 +1567,8 @@ class VideoLockCb(ctypes.c_void_p):
     @return: a private pointer for the display and unlock callbacks to identify the picture buffers.
     """
     pass
+
+
 class VideoUnlockCb(ctypes.c_void_p):
     """Callback prototype to unlock a picture buffer.
     When the video frame decoding is complete, the unlock callback is invoked.
@@ -1064,6 +1581,8 @@ class VideoUnlockCb(ctypes.c_void_p):
     @param planes: pixel planes as defined by the @ref libvlc_video_lock_cb callback (this parameter is only for convenience) [IN].
     """
     pass
+
+
 class VideoDisplayCb(ctypes.c_void_p):
     """Callback prototype to display a picture.
     When the video frame needs to be shown, as determined by the media playback
@@ -1072,6 +1591,8 @@ class VideoDisplayCb(ctypes.c_void_p):
     @param picture: private pointer returned from the @ref libvlc_video_lock_cb callback [IN].
     """
     pass
+
+
 class VideoFormatCb(ctypes.c_void_p):
     """Callback prototype to configure picture buffers format.
     This callback gets the format of the video as output by the video decoder
@@ -1086,11 +1607,15 @@ class VideoFormatCb(ctypes.c_void_p):
     @return: lines table of scanlines count for each plane.
     """
     pass
+
+
 class VideoCleanupCb(ctypes.c_void_p):
     """Callback prototype to configure picture buffers format.
     @param opaque: private pointer as passed to L{libvlc_video_set_callbacks}() (and possibly modified by @ref libvlc_video_format_cb) [IN].
     """
     pass
+
+
 class AudioPlayCb(ctypes.c_void_p):
     """Callback prototype for audio playback.
     The LibVLC media player decodes and post-processes the audio signal
@@ -1110,6 +1635,8 @@ class AudioPlayCb(ctypes.c_void_p):
     @param pts: expected play time stamp (see libvlc_delay()).
     """
     pass
+
+
 class AudioPauseCb(ctypes.c_void_p):
     """Callback prototype for audio pause.
     LibVLC invokes this callback to pause audio playback.
@@ -1118,6 +1645,8 @@ class AudioPauseCb(ctypes.c_void_p):
     @param pts: time stamp of the pause request (should be elapsed already).
     """
     pass
+
+
 class AudioResumeCb(ctypes.c_void_p):
     """Callback prototype for audio resumption.
     LibVLC invokes this callback to resume audio playback after it was
@@ -1127,6 +1656,8 @@ class AudioResumeCb(ctypes.c_void_p):
     @param pts: time stamp of the resumption request (should be elapsed already).
     """
     pass
+
+
 class AudioFlushCb(ctypes.c_void_p):
     """Callback prototype for audio buffer flush.
     LibVLC invokes this callback if it needs to discard all pending buffers and
@@ -1135,6 +1666,8 @@ class AudioFlushCb(ctypes.c_void_p):
     @param data: data pointer as passed to L{libvlc_audio_set_callbacks}() [IN].
     """
     pass
+
+
 class AudioDrainCb(ctypes.c_void_p):
     """Callback prototype for audio buffer drain.
     LibVLC may invoke this callback when the decoded audio track is ending.
@@ -1143,6 +1676,8 @@ class AudioDrainCb(ctypes.c_void_p):
     @param data: data pointer as passed to L{libvlc_audio_set_callbacks}() [IN].
     """
     pass
+
+
 class AudioSetVolumeCb(ctypes.c_void_p):
     """Callback prototype for audio volume change.
     @param data: data pointer as passed to L{libvlc_audio_set_callbacks}() [IN].
@@ -1150,6 +1685,8 @@ class AudioSetVolumeCb(ctypes.c_void_p):
     @param mute: muted flag.
     """
     pass
+
+
 class AudioSetupCb(ctypes.c_void_p):
     """Callback prototype to setup the audio playback.
     This is called when the media player needs to create a new audio output.
@@ -1160,12 +1697,16 @@ class AudioSetupCb(ctypes.c_void_p):
     @return: 0 on success, anything else to skip audio playback.
     """
     pass
+
+
 class AudioCleanupCb(ctypes.c_void_p):
     """Callback prototype for audio playback cleanup.
     This is called when the media player no longer needs an audio output.
     @param opaque: data pointer as passed to L{libvlc_audio_set_callbacks}() [IN].
     """
     pass
+
+
 class CallbackDecorators(object):
     "Class holding various method decorators for callback functions."
     Callback = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
@@ -1180,7 +1721,8 @@ class CallbackDecorators(object):
         @param fmt: printf() format string (as defined by ISO C11).
         @param args: variable argument list for the format @note Log message handlers B{must} be thread-safe. @warning The message context pointer, the format string parameters and the variable arguments are only valid until the callback returns.
     '''
-    MediaOpenCb = ctypes.CFUNCTYPE(ctypes.POINTER(ctypes.c_int), ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.POINTER(ctypes.c_uint64))
+    MediaOpenCb = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p),
+                                   ctypes.POINTER(ctypes.c_uint64))
     MediaOpenCb.__doc__ = '''Callback prototype to open a custom bitstream input media.
         The same media item can be opened multiple times. Each time, this callback
         is invoked. It should allocate and initialize any instance-specific
@@ -1189,14 +1731,14 @@ class CallbackDecorators(object):
         @param opaque: private pointer as passed to L{libvlc_media_new_callbacks}().
         @return: datap storage space for a private data pointer, sizep byte length of the bitstream or UINT64_MAX if unknown.
     '''
-    MediaReadCb = ctypes.CFUNCTYPE(ctypes.POINTER(ctypes.c_ssize_t), ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t)
+    MediaReadCb = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t)
     MediaReadCb.__doc__ = '''Callback prototype to read data from a custom bitstream input media.
         @param opaque: private pointer as set by the @ref libvlc_media_open_cb callback.
         @param buf: start address of the buffer to read data into.
         @param len: bytes length of the buffer.
         @return: strictly positive number of bytes read, 0 on end-of-stream, or -1 on non-recoverable error @note If no data is immediately available, then the callback should sleep. @warning The application is responsible for avoiding deadlock situations. In particular, the callback should return an error if playback is stopped; if it does not return, then L{libvlc_media_player_stop}() will never return.
     '''
-    MediaSeekCb = ctypes.CFUNCTYPE(ctypes.POINTER(ctypes.c_int), ctypes.c_void_p, ctypes.c_uint64)
+    MediaSeekCb = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint64)
     MediaSeekCb.__doc__ = '''Callback prototype to seek a custom bitstream input media.
         @param opaque: private pointer as set by the @ref libvlc_media_open_cb callback.
         @param offset: absolute byte offset to seek to.
@@ -1206,7 +1748,7 @@ class CallbackDecorators(object):
     MediaCloseCb.__doc__ = '''Callback prototype to close a custom bitstream input media.
         @param opaque: private pointer as set by the @ref libvlc_media_open_cb callback.
     '''
-    VideoLockCb = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
+    VideoLockCb = ctypes.CFUNCTYPE(ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p))
     VideoLockCb.__doc__ = '''Callback prototype to allocate and lock a picture buffer.
         Whenever a new video frame needs to be decoded, the lock callback is
         invoked. Depending on the video chroma, one or three pixel planes of
@@ -1234,7 +1776,9 @@ class CallbackDecorators(object):
         @param opaque: private pointer as passed to L{libvlc_video_set_callbacks}() [IN].
         @param picture: private pointer returned from the @ref libvlc_video_lock_cb callback [IN].
     '''
-    VideoFormatCb = ctypes.CFUNCTYPE(ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint))
+    VideoFormatCb = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p,
+                                     ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint),
+                                     ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint))
     VideoFormatCb.__doc__ = '''Callback prototype to configure picture buffers format.
         This callback gets the format of the video as output by the video decoder
         and the chain of video filters (if any). It can opt to change any parameter
@@ -1304,7 +1848,8 @@ class CallbackDecorators(object):
         @param volume: software volume (1. = nominal, 0. = mute).
         @param mute: muted flag.
     '''
-    AudioSetupCb = ctypes.CFUNCTYPE(ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint))
+    AudioSetupCb = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_char_p,
+                                    ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint))
     AudioSetupCb.__doc__ = '''Callback prototype to setup the audio playback.
         This is called when the media player needs to create a new audio output.
         @param opaque: pointer to the data pointer passed to L{libvlc_audio_set_callbacks}() [IN/OUT].
@@ -1318,308 +1863,12 @@ class CallbackDecorators(object):
         This is called when the media player no longer needs an audio output.
         @param opaque: data pointer as passed to L{libvlc_audio_set_callbacks}() [IN].
     '''
+
+
 cb = CallbackDecorators
- # End of generated enum types #
-
- # From libvlc_structures.h
-
-class AudioOutput(_Cstruct):
-
-    def __str__(self):
-        return '%s(%s:%s)' % (self.__class__.__name__, self.name, self.description)
-
-AudioOutput._fields_ = [  # recursive struct
-    ('name',        ctypes.c_char_p),
-    ('description', ctypes.c_char_p),
-    ('next',        ctypes.POINTER(AudioOutput)),
-    ]
-
-class LogMessage(_Cstruct):
-    _fields_ = [
-        ('size',     ctypes.c_uint  ),
-        ('severity', ctypes.c_int   ),
-        ('type',     ctypes.c_char_p),
-        ('name',     ctypes.c_char_p),
-        ('header',   ctypes.c_char_p),
-        ('message',  ctypes.c_char_p),
-    ]
-
-    def __init__(self):
-        super(LogMessage, self).__init__()
-        self.size = ctypes.sizeof(self)
-
-    def __str__(self):
-        return '%s(%d:%s): %s' % (self.__class__.__name__, self.severity, self.type, self.message)
-
-class MediaEvent(_Cstruct):
-    _fields_ = [
-        ('media_name',    ctypes.c_char_p),
-        ('instance_name', ctypes.c_char_p),
-    ]
-
-class MediaStats(_Cstruct):
-    _fields_ = [
-        ('read_bytes',          ctypes.c_int  ),
-        ('input_bitrate',       ctypes.c_float),
-        ('demux_read_bytes',    ctypes.c_int  ),
-        ('demux_bitrate',       ctypes.c_float),
-        ('demux_corrupted',     ctypes.c_int  ),
-        ('demux_discontinuity', ctypes.c_int  ),
-        ('decoded_video',       ctypes.c_int  ),
-        ('decoded_audio',       ctypes.c_int  ),
-        ('displayed_pictures',  ctypes.c_int  ),
-        ('lost_pictures',       ctypes.c_int  ),
-        ('played_abuffers',     ctypes.c_int  ),
-        ('lost_abuffers',       ctypes.c_int  ),
-        ('sent_packets',        ctypes.c_int  ),
-        ('sent_bytes',          ctypes.c_int  ),
-        ('send_bitrate',        ctypes.c_float),
-    ]
-
-class MediaTrackInfo(_Cstruct):
-    _fields_ = [
-        ('codec',              ctypes.c_uint32),
-        ('id',                 ctypes.c_int   ),
-        ('type',               TrackType      ),
-        ('profile',            ctypes.c_int   ),
-        ('level',              ctypes.c_int   ),
-        ('channels_or_height', ctypes.c_uint  ),
-        ('rate_or_width',      ctypes.c_uint  ),
-    ]
-
-class AudioTrack(_Cstruct):
-    _fields_ = [
-        ('channels', ctypes.c_uint),
-        ('rate', ctypes.c_uint),
-        ]
-
-class VideoTrack(_Cstruct):
-    _fields_ = [
-        ('height', ctypes.c_uint),
-        ('width', ctypes.c_uint),
-        ('sar_num', ctypes.c_uint),
-        ('sar_den', ctypes.c_uint),
-        ('frame_rate_num', ctypes.c_uint),
-        ('frame_rate_den', ctypes.c_uint),
-        ]
-
-class SubtitleTrack(_Cstruct):
-    _fields_ = [
-        ('encoding', ctypes.c_char_p),
-        ]
-
-class MediaTrackTracks(ctypes.Union):
-    _fields_ = [
-        ('audio', ctypes.POINTER(AudioTrack)),
-        ('video', ctypes.POINTER(VideoTrack)),
-        ('subtitle', ctypes.POINTER(SubtitleTrack)),
-        ]
-
-class MediaTrack(_Cstruct):
-    _anonymous_ = ("u",)
-    _fields_ = [
-        ('codec',              ctypes.c_uint32),
-        ('original_fourcc',    ctypes.c_uint32),
-        ('id',                 ctypes.c_int   ),
-        ('type',               TrackType      ),
-        ('profile',            ctypes.c_int   ),
-        ('level',              ctypes.c_int   ),
-
-        ('u',                  MediaTrackTracks),
-        ('bitrate',            ctypes.c_uint),
-        ('language',           ctypes.c_char_p),
-        ('description',        ctypes.c_char_p),
-        ]
-
-class PlaylistItem(_Cstruct):
-    _fields_ = [
-        ('id',   ctypes.c_int   ),
-        ('uri',  ctypes.c_char_p),
-        ('name', ctypes.c_char_p),
-    ]
-
-    def __str__(self):
-        return '%s #%d %s (uri %s)' % (self.__class__.__name__, self.id, self.name, self.uri)
-
-class Position(object):
-    """Enum-like, immutable window position constants.
-
-       See e.g. VideoMarqueeOption.Position.
-    """
-    Center       = 0
-    Left         = 1
-    CenterLeft   = 1
-    Right        = 2
-    CenterRight  = 2
-    Top          = 4
-    TopCenter    = 4
-    TopLeft      = 5
-    TopRight     = 6
-    Bottom       = 8
-    BottomCenter = 8
-    BottomLeft   = 9
-    BottomRight  = 10
-    def __init__(self, *unused):
-        raise TypeError('constants only')
-    def __setattr__(self, *unused):  #PYCHOK expected
-        raise TypeError('immutable constants')
-
-class Rectangle(_Cstruct):
-    _fields_ = [
-        ('top',    ctypes.c_int),
-        ('left',   ctypes.c_int),
-        ('bottom', ctypes.c_int),
-        ('right',  ctypes.c_int),
-    ]
-
-class TrackDescription(_Cstruct):
-
-    def __str__(self):
-        return '%s(%d:%s)' % (self.__class__.__name__, self.id, self.name)
-
-TrackDescription._fields_ = [  # recursive struct
-    ('id',   ctypes.c_int   ),
-    ('name', ctypes.c_char_p),
-    ('next', ctypes.POINTER(TrackDescription)),
-    ]
-
-def track_description_list(head):
-    """Convert a TrackDescription linked list to a Python list (and release the former).
-    """
-    r = []
-    if head:
-        item = head
-        while item:
-            item = item.contents
-            r.append((item.id, item.name))
-            item = item.next
-        try:
-            libvlc_track_description_release(head)
-        except NameError:
-            libvlc_track_description_list_release(head)
-
-    return r
-
-class EventUnion(ctypes.Union):
-    _fields_ = [
-        ('meta_type',    ctypes.c_uint    ),
-        ('new_child',    ctypes.c_uint    ),
-        ('new_duration', ctypes.c_longlong),
-        ('new_status',   ctypes.c_int     ),
-        ('media',        ctypes.c_void_p  ),
-        ('new_state',    ctypes.c_uint    ),
-        # FIXME: Media instance
-        ('new_cache', ctypes.c_float   ),
-        ('new_position', ctypes.c_float   ),
-        ('new_time',     ctypes.c_longlong),
-        ('new_title',    ctypes.c_int     ),
-        ('new_seekable', ctypes.c_longlong),
-        ('new_pausable', ctypes.c_longlong),
-        ('new_scrambled', ctypes.c_longlong),
-        ('new_count', ctypes.c_longlong),
-        # FIXME: Skipped MediaList and MediaListView...
-        ('filename',     ctypes.c_char_p  ),
-        ('new_length',   ctypes.c_longlong),
-        ('media_event',  MediaEvent       ),
-    ]
-
-class Event(_Cstruct):
-    _fields_ = [
-        ('type',   EventType      ),
-        ('object', ctypes.c_void_p),
-        ('u',      EventUnion     ),
-    ]
-
-class ModuleDescription(_Cstruct):
-
-    def __str__(self):
-        return '%s %s (%s)' % (self.__class__.__name__, self.shortname, self.name)
-
-ModuleDescription._fields_ = [  # recursive struct
-    ('name',      ctypes.c_char_p),
-    ('shortname', ctypes.c_char_p),
-    ('longname',  ctypes.c_char_p),
-    ('help',      ctypes.c_char_p),
-    ('next',      ctypes.POINTER(ModuleDescription)),
-    ]
-
-def module_description_list(head):
-    """Convert a ModuleDescription linked list to a Python list (and release the former).
-    """
-    r = []
-    if head:
-        item = head
-        while item:
-            item = item.contents
-            r.append((item.name, item.shortname, item.longname, item.help))
-            item = item.next
-        libvlc_module_description_list_release(head)
-    return r
-
-class AudioOutputDevice(_Cstruct):
-
-    def __str__(self):
-        return '%s(%d:%s)' % (self.__class__.__name__, self.id, self.name)
-
-AudioOutputDevice._fields_ = [  # recursive struct
-    ('next', ctypes.POINTER(AudioOutputDevice)),
-    ('device',   ctypes.c_char_p   ),
-    ('description', ctypes.c_char_p),
-    ]
-
-class TitleDescription(_Cstruct):
-    _fields_ = [
-        ('duration', ctypes.c_longlong),
-        ('name', ctypes.c_char_p),
-        ('menu', ctypes.c_bool),
-    ]
-
-class ChapterDescription(_Cstruct):
-    _fields_ = [
-        ('time_offset', ctypes.c_longlong),
-        ('duration', ctypes.c_longlong),
-        ('name', ctypes.c_char_p),
-    ]
-
-class VideoViewpoint(_Cstruct):
-    _fields_ = [
-        ('yaw', ctypes.c_float),
-        ('pitch', ctypes.c_float),
-        ('roll', ctypes.c_float),
-        ('field_of_view', ctypes.c_float),
-    ]
-
-class MediaDiscovererDescription(_Cstruct):
-    _fields_ = [
-        ('name', ctypes.c_char_p),
-        ('longname', ctypes.c_char_p),
-        ('cat', MediaDiscovererCategory),
-    ]
-
-    def __str__(self):
-        return '%s %s (%d) - %s' % (self.__class__.__name__, self.name, self.cat, self.longname)
-
-# This struct depends on the MediaSlaveType enum that is defined only
-# in > 2.2
-if 'MediaSlaveType' in locals():
-    class MediaSlave(_Cstruct):
-        _fields_ = [
-            ('psz_uri', ctypes.c_char_p),
-            ('i_type', MediaSlaveType),
-            ('i_priority', ctypes.c_uint)
-        ]
-
-class RDDescription(_Cstruct):
-    _fields_ = [
-        ('name', ctypes.c_char_p),
-        ('longname', ctypes.c_char_p)
-    ]
 
 
-class MediaThumbnailRequest:
-    def __new__(cls, *args):
-        if len(args) == 1 and isinstance(args[0], _Ints):
-            return _Constructor(cls, args[0])
+# End of generated enum types #
 
 # End of header.py #
 class AudioEqualizer(_Ctype):
@@ -1636,7 +1885,6 @@ class AudioEqualizer(_Ctype):
             return _Constructor(cls, args[0])
         return libvlc_audio_equalizer_new()
 
-
     def release(self):
         '''Release a previously created equalizer instance.
         The equalizer was previously created by using L{new}() or
@@ -1645,7 +1893,6 @@ class AudioEqualizer(_Ctype):
         @version: LibVLC 2.2.0 or later.
         '''
         return libvlc_audio_equalizer_release(self)
-
 
     def set_preamp(self, f_preamp):
         '''Set a new pre-amplification value for an equalizer.
@@ -1658,14 +1905,12 @@ class AudioEqualizer(_Ctype):
         '''
         return libvlc_audio_equalizer_set_preamp(self, f_preamp)
 
-
     def get_preamp(self):
         '''Get the current pre-amplification value from an equalizer.
         @return: preamp value (Hz).
         @version: LibVLC 2.2.0 or later.
         '''
         return libvlc_audio_equalizer_get_preamp(self)
-
 
     def set_amp_at_index(self, f_amp, u_band):
         '''Set a new amplification value for a particular equalizer frequency band.
@@ -1679,7 +1924,6 @@ class AudioEqualizer(_Ctype):
         '''
         return libvlc_audio_equalizer_set_amp_at_index(self, f_amp, u_band)
 
-
     def get_amp_at_index(self, u_band):
         '''Get the amplification value for a particular equalizer frequency band.
         @param u_band: index, counting from zero, of the frequency band to get.
@@ -1687,6 +1931,7 @@ class AudioEqualizer(_Ctype):
         @version: LibVLC 2.2.0 or later.
         '''
         return libvlc_audio_equalizer_get_amp_at_index(self, u_band)
+
 
 class EventManager(_Ctype):
     '''Create an event manager with callback handler.
@@ -1711,7 +1956,8 @@ class EventManager(_Ctype):
 
     def __new__(cls, ptr=_internal_guard):
         if ptr == _internal_guard:
-            raise VLCException("(INTERNAL) ctypes class.\nYou should get a reference to EventManager through the MediaPlayer.event_manager() method.")
+            raise VLCException(
+                "(INTERNAL) ctypes class.\nYou should get a reference to EventManager through the MediaPlayer.event_manager() method.")
         return _Constructor(cls, ptr)
 
     def event_attach(self, eventtype, callback, *args, **kwds):
@@ -1734,12 +1980,13 @@ class EventManager(_Ctype):
             raise VLCException("%s required: %r" % ('EventType', eventtype))
         if not hasattr(callback, '__call__'):  # callable()
             raise VLCException("%s required: %r" % ('callable', callback))
-         # check that the callback expects arguments
+        # check that the callback expects arguments
         if not any(getargspec(callback)[:2]):  # list(...)
             raise VLCException("%s required: %r" % ('argument', callback))
 
         if self._callback_handler is None:
             _called_from_ctypes = ctypes.CFUNCTYPE(None, ctypes.POINTER(Event), ctypes.c_void_p)
+
             @_called_from_ctypes
             def _callback_handler(event, k):
                 """(INTERNAL) handle callback call from ctypes.
@@ -1748,12 +1995,14 @@ class EventManager(_Ctype):
                 method since ctypes does not prepend self as the
                 first parameter, hence this closure.
                 """
-                try: # retrieve Python callback and arguments
+                try:  # retrieve Python callback and arguments
                     call, args, kwds = self._callbacks[k]
-                     # deref event.contents to simplify callback code
-                    call(event.contents, *args, **kwds)
                 except KeyError:  # detached?
                     pass
+                else:
+                    # deref event.contents to simplify callback code
+                    call(event.contents, *args, **kwds)
+
             self._callback_handler = _callback_handler
             self._callbacks = {}
 
@@ -1773,7 +2022,7 @@ class EventManager(_Ctype):
 
         k = eventtype.value
         if k in self._callbacks:
-            del self._callbacks[k] # remove, regardless of libvlc return value
+            del self._callbacks[k]  # remove, regardless of libvlc return value
             libvlc_event_detach(self, k, self._callback_handler, k)
 
 
@@ -1814,13 +2063,13 @@ class Instance(_Ctype):
             os.environ.setdefault('VLC_PLUGIN_PATH', plugin_path)
 
         if PYTHON3:
-            args = [ str_to_bytes(a) for a in args ]
+            args = [str_to_bytes(a) for a in args]
         return libvlc_new(len(args), args)
 
     def media_player_new(self, uri=None):
         """Create a new MediaPlayer instance.
 
-        @param uri: an optional URI to play in the player.
+        @param uri: an optional URI to play in the player as a str, bytes or PathLike object.
         """
         p = libvlc_media_player_new(self)
         if uri:
@@ -1852,8 +2101,10 @@ class Instance(_Ctype):
         Alternatively, options can be added to the media using the
         Media.add_options method (with the same limitation).
 
+        @param mrl: A str, bytes or PathLike object
         @param options: optional media option=value strings
         """
+        mrl = try_fspath(mrl)
         if ':' in mrl and mrl.index(':') > 1:
             # Assume it is a URL
             m = libvlc_media_new_location(self, str_to_bytes(mrl))
@@ -1865,9 +2116,18 @@ class Instance(_Ctype):
         m._instance = self
         return m
 
+    def media_new_path(self, path):
+        """Create a media for a certain file path.
+        See L{media_release}.
+        @param path: A str, byte, or PathLike object representing a local filesystem path.
+        @return: the newly created media or None on error.
+        """
+        path = try_fspath(path)
+        return libvlc_media_new_path(self, str_to_bytes(path))
+
     def media_list_new(self, mrls=None):
         """Create a new MediaList instance.
-        @param mrls: optional list of MRL strings
+        @param mrls: optional list of MRL strings, bytes, or PathLike objects.
         """
         l = libvlc_media_list_new(self)
         # We should take the lock, but since we did not leak the
@@ -1906,14 +2166,11 @@ class Instance(_Ctype):
         """
         return module_description_list(libvlc_video_filter_list_get(self))
 
-
-
     def release(self):
         '''Decrement the reference count of a libvlc instance, and destroy it
         if it reaches zero.
         '''
         return libvlc_release(self)
-
 
     def retain(self):
         '''Increments the reference count of a libvlc instance.
@@ -1921,14 +2178,12 @@ class Instance(_Ctype):
         '''
         return libvlc_retain(self)
 
-
     def add_intf(self, name):
         '''Try to start a user interface for the libvlc instance.
         @param name: interface name, or None for default.
         @return: 0 on success, -1 on error.
         '''
         return libvlc_add_intf(self, str_to_bytes(name))
-
 
     def set_user_agent(self, name, http):
         '''Sets the application name. LibVLC passes this as the user agent string
@@ -1939,7 +2194,6 @@ class Instance(_Ctype):
         '''
         return libvlc_set_user_agent(self, str_to_bytes(name), str_to_bytes(http))
 
-
     def set_app_id(self, id, version, icon):
         '''Sets some meta-information about the application.
         See also L{set_user_agent}().
@@ -1949,7 +2203,6 @@ class Instance(_Ctype):
         @version: LibVLC 2.1.0 or later.
         '''
         return libvlc_set_app_id(self, str_to_bytes(id), str_to_bytes(version), str_to_bytes(icon))
-
 
     def log_unset(self):
         '''Unsets the logging callback.
@@ -1962,7 +2215,6 @@ class Instance(_Ctype):
         '''
         return libvlc_log_unset(self)
 
-
     def log_set(self, cb, data):
         '''Sets the logging callback for a LibVLC instance.
         This function is thread-safe: it will wait for any pending callbacks
@@ -1973,14 +2225,12 @@ class Instance(_Ctype):
         '''
         return libvlc_log_set(self, cb, data)
 
-
     def log_set_file(self, stream):
         '''Sets up logging to a file.
         @param stream: FILE pointer opened for writing (the FILE pointer must remain valid until L{log_unset}()).
         @version: LibVLC 2.1.0 or later.
         '''
         return libvlc_log_set_file(self, stream)
-
 
     def media_discoverer_new(self, psz_name):
         '''Create a media discoverer object by name.
@@ -1997,7 +2247,6 @@ class Instance(_Ctype):
         '''
         return libvlc_media_discoverer_new(self, str_to_bytes(psz_name))
 
-
     def media_discoverer_list_get(self, i_cat, ppp_services):
         '''Get media discoverer services by category.
         @param i_cat: category of services to fetch.
@@ -2007,19 +2256,16 @@ class Instance(_Ctype):
         '''
         return libvlc_media_discoverer_list_get(self, i_cat, ppp_services)
 
-
     def media_library_new(self):
         '''Create an new Media Library object.
         @return: a new object or None on error.
         '''
         return libvlc_media_library_new(self)
 
-
     def vlm_release(self):
         '''Release the vlm instance related to the given L{Instance}.
         '''
         return libvlc_vlm_release(self)
-
 
     def vlm_add_broadcast(self, psz_name, psz_input, psz_output, i_options, ppsz_options, b_enabled, b_loop):
         '''Add a broadcast, with one input.
@@ -2032,8 +2278,8 @@ class Instance(_Ctype):
         @param b_loop: Should this broadcast be played in loop ?
         @return: 0 on success, -1 on error.
         '''
-        return libvlc_vlm_add_broadcast(self, str_to_bytes(psz_name), str_to_bytes(psz_input), str_to_bytes(psz_output), i_options, ppsz_options, b_enabled, b_loop)
-
+        return libvlc_vlm_add_broadcast(self, str_to_bytes(psz_name), str_to_bytes(psz_input), str_to_bytes(psz_output),
+                                        i_options, ppsz_options, b_enabled, b_loop)
 
     def vlm_add_vod(self, psz_name, psz_input, i_options, ppsz_options, b_enabled, psz_mux):
         '''Add a vod, with one input.
@@ -2045,8 +2291,8 @@ class Instance(_Ctype):
         @param psz_mux: the muxer of the vod media.
         @return: 0 on success, -1 on error.
         '''
-        return libvlc_vlm_add_vod(self, str_to_bytes(psz_name), str_to_bytes(psz_input), i_options, ppsz_options, b_enabled, str_to_bytes(psz_mux))
-
+        return libvlc_vlm_add_vod(self, str_to_bytes(psz_name), str_to_bytes(psz_input), i_options, ppsz_options,
+                                  b_enabled, str_to_bytes(psz_mux))
 
     def vlm_del_media(self, psz_name):
         '''Delete a media (VOD or broadcast).
@@ -2054,7 +2300,6 @@ class Instance(_Ctype):
         @return: 0 on success, -1 on error.
         '''
         return libvlc_vlm_del_media(self, str_to_bytes(psz_name))
-
 
     def vlm_set_enabled(self, psz_name, b_enabled):
         '''Enable or disable a media (VOD or broadcast).
@@ -2064,7 +2309,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_set_enabled(self, str_to_bytes(psz_name), b_enabled)
 
-
     def vlm_set_output(self, psz_name, psz_output):
         '''Set the output for a media.
         @param psz_name: the media to work on.
@@ -2072,7 +2316,6 @@ class Instance(_Ctype):
         @return: 0 on success, -1 on error.
         '''
         return libvlc_vlm_set_output(self, str_to_bytes(psz_name), str_to_bytes(psz_output))
-
 
     def vlm_set_input(self, psz_name, psz_input):
         '''Set a media's input MRL. This will delete all existing inputs and
@@ -2083,7 +2326,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_set_input(self, str_to_bytes(psz_name), str_to_bytes(psz_input))
 
-
     def vlm_add_input(self, psz_name, psz_input):
         '''Add a media's input MRL. This will add the specified one.
         @param psz_name: the media to work on.
@@ -2091,7 +2333,6 @@ class Instance(_Ctype):
         @return: 0 on success, -1 on error.
         '''
         return libvlc_vlm_add_input(self, str_to_bytes(psz_name), str_to_bytes(psz_input))
-
 
     def vlm_set_loop(self, psz_name, b_loop):
         '''Set a media's loop status.
@@ -2101,7 +2342,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_set_loop(self, str_to_bytes(psz_name), b_loop)
 
-
     def vlm_set_mux(self, psz_name, psz_mux):
         '''Set a media's vod muxer.
         @param psz_name: the media to work on.
@@ -2109,7 +2349,6 @@ class Instance(_Ctype):
         @return: 0 on success, -1 on error.
         '''
         return libvlc_vlm_set_mux(self, str_to_bytes(psz_name), str_to_bytes(psz_mux))
-
 
     def vlm_change_media(self, psz_name, psz_input, psz_output, i_options, ppsz_options, b_enabled, b_loop):
         '''Edit the parameters of a media. This will delete all existing inputs and
@@ -2123,8 +2362,8 @@ class Instance(_Ctype):
         @param b_loop: Should this broadcast be played in loop ?
         @return: 0 on success, -1 on error.
         '''
-        return libvlc_vlm_change_media(self, str_to_bytes(psz_name), str_to_bytes(psz_input), str_to_bytes(psz_output), i_options, ppsz_options, b_enabled, b_loop)
-
+        return libvlc_vlm_change_media(self, str_to_bytes(psz_name), str_to_bytes(psz_input), str_to_bytes(psz_output),
+                                       i_options, ppsz_options, b_enabled, b_loop)
 
     def vlm_play_media(self, psz_name):
         '''Play the named broadcast.
@@ -2133,14 +2372,12 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_play_media(self, str_to_bytes(psz_name))
 
-
     def vlm_stop_media(self, psz_name):
         '''Stop the named broadcast.
         @param psz_name: the name of the broadcast.
         @return: 0 on success, -1 on error.
         '''
         return libvlc_vlm_stop_media(self, str_to_bytes(psz_name))
-
 
     def vlm_pause_media(self, psz_name):
         '''Pause the named broadcast.
@@ -2149,7 +2386,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_pause_media(self, str_to_bytes(psz_name))
 
-
     def vlm_seek_media(self, psz_name, f_percentage):
         '''Seek in the named broadcast.
         @param psz_name: the name of the broadcast.
@@ -2157,7 +2393,6 @@ class Instance(_Ctype):
         @return: 0 on success, -1 on error.
         '''
         return libvlc_vlm_seek_media(self, str_to_bytes(psz_name), f_percentage)
-
 
     def vlm_show_media(self, psz_name):
         '''Return information about the named media as a JSON
@@ -2173,7 +2408,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_show_media(self, str_to_bytes(psz_name))
 
-
     def vlm_get_media_instance_position(self, psz_name, i_instance):
         '''Get vlm_media instance position by name or instance id.
         @param psz_name: name of vlm media instance.
@@ -2181,7 +2415,6 @@ class Instance(_Ctype):
         @return: position as float or -1. on error.
         '''
         return libvlc_vlm_get_media_instance_position(self, str_to_bytes(psz_name), i_instance)
-
 
     def vlm_get_media_instance_time(self, psz_name, i_instance):
         '''Get vlm_media instance time by name or instance id.
@@ -2191,7 +2424,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_get_media_instance_time(self, str_to_bytes(psz_name), i_instance)
 
-
     def vlm_get_media_instance_length(self, psz_name, i_instance):
         '''Get vlm_media instance length by name or instance id.
         @param psz_name: name of vlm media instance.
@@ -2200,7 +2432,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_get_media_instance_length(self, str_to_bytes(psz_name), i_instance)
 
-
     def vlm_get_media_instance_rate(self, psz_name, i_instance):
         '''Get vlm_media instance playback rate by name or instance id.
         @param psz_name: name of vlm media instance.
@@ -2208,7 +2439,6 @@ class Instance(_Ctype):
         @return: playback rate or -1 on error.
         '''
         return libvlc_vlm_get_media_instance_rate(self, str_to_bytes(psz_name), i_instance)
-
 
     def vlm_get_media_instance_title(self, psz_name, i_instance):
         '''Get vlm_media instance title number by name or instance id.
@@ -2219,7 +2449,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_get_media_instance_title(self, str_to_bytes(psz_name), i_instance)
 
-
     def vlm_get_media_instance_chapter(self, psz_name, i_instance):
         '''Get vlm_media instance chapter number by name or instance id.
         @param psz_name: name of vlm media instance.
@@ -2228,7 +2457,6 @@ class Instance(_Ctype):
         @bug: will always return 0.
         '''
         return libvlc_vlm_get_media_instance_chapter(self, str_to_bytes(psz_name), i_instance)
-
 
     def vlm_get_media_instance_seekable(self, psz_name, i_instance):
         '''Is libvlc instance seekable ?
@@ -2247,7 +2475,6 @@ class Instance(_Ctype):
         '''
         return libvlc_vlm_get_event_manager(self)
 
-
     def media_new_location(self, psz_mrl):
         '''Create a media with a certain given media resource location,
         for instance a valid URL.
@@ -2260,16 +2487,6 @@ class Instance(_Ctype):
         @return: the newly created media or None on error.
         '''
         return libvlc_media_new_location(self, str_to_bytes(psz_mrl))
-
-
-    def media_new_path(self, path):
-        '''Create a media for a certain file path.
-        See L{media_release}.
-        @param path: local filesystem path.
-        @return: the newly created media or None on error.
-        '''
-        return libvlc_media_new_path(self, str_to_bytes(path))
-
 
     def media_new_fd(self, fd):
         '''Create a media for an already open file descriptor.
@@ -2291,7 +2508,6 @@ class Instance(_Ctype):
         '''
         return libvlc_media_new_fd(self, fd)
 
-
     def media_new_callbacks(self, open_cb, read_cb, seek_cb, close_cb, opaque):
         '''Create a media with custom callbacks to read the data from.
         @param open_cb: callback to open the custom bitstream input media.
@@ -2304,7 +2520,6 @@ class Instance(_Ctype):
         '''
         return libvlc_media_new_callbacks(self, open_cb, read_cb, seek_cb, close_cb, opaque)
 
-
     def media_new_as_node(self, psz_name):
         '''Create a media as an empty node with a given name.
         See L{media_release}.
@@ -2312,7 +2527,6 @@ class Instance(_Ctype):
         @return: the new empty media or None on error.
         '''
         return libvlc_media_new_as_node(self, str_to_bytes(psz_name))
-
 
     def renderer_discoverer_new(self, psz_name):
         '''Create a renderer discoverer object by name
@@ -2328,7 +2542,6 @@ class Instance(_Ctype):
         '''
         return libvlc_renderer_discoverer_new(self, str_to_bytes(psz_name))
 
-
     def renderer_discoverer_list_get(self, ppp_services):
         '''Get media discoverer services
         See libvlc_renderer_list_release().
@@ -2338,14 +2551,12 @@ class Instance(_Ctype):
         '''
         return libvlc_renderer_discoverer_list_get(self, ppp_services)
 
-
     def audio_output_device_count(self, psz_audio_output):
         '''Backward compatibility stub. Do not use in new code.
         \deprecated Use L{audio_output_device_list_get}() instead.
         @return: always 0.
         '''
         return libvlc_audio_output_device_count(self, str_to_bytes(psz_audio_output))
-
 
     def audio_output_device_longname(self, psz_output, i_device):
         '''Backward compatibility stub. Do not use in new code.
@@ -2354,7 +2565,6 @@ class Instance(_Ctype):
         '''
         return libvlc_audio_output_device_longname(self, str_to_bytes(psz_output), i_device)
 
-
     def audio_output_device_id(self, psz_audio_output, i_device):
         '''Backward compatibility stub. Do not use in new code.
         \deprecated Use L{audio_output_device_list_get}() instead.
@@ -2362,19 +2572,16 @@ class Instance(_Ctype):
         '''
         return libvlc_audio_output_device_id(self, str_to_bytes(psz_audio_output), i_device)
 
-
     def media_discoverer_new_from_name(self, psz_name):
         '''\deprecated Use L{media_discoverer_new}() and L{media_discoverer_start}().
         '''
         return libvlc_media_discoverer_new_from_name(self, str_to_bytes(psz_name))
-
 
     def wait(self):
         '''Waits until an interface causes the instance to exit.
         You should start at least one interface first, using L{add_intf}().
         '''
         return libvlc_wait(self)
-
 
     def get_log_verbosity(self):
         '''Always returns minus one.
@@ -2383,7 +2590,6 @@ class Instance(_Ctype):
         '''
         return libvlc_get_log_verbosity(self)
 
-
     def set_log_verbosity(self, level):
         '''This function does nothing.
         It is only provided for backward compatibility.
@@ -2391,14 +2597,12 @@ class Instance(_Ctype):
         '''
         return libvlc_set_log_verbosity(self, level)
 
-
     def log_open(self):
         '''This function does nothing useful.
         It is only provided for backward compatibility.
         @return: an unique pointer or None on error.
         '''
         return libvlc_log_open(self)
-
 
     def playlist_play(self, i_id, i_options, ppsz_options):
         '''Start playing (if there is any item in the playlist).
@@ -2410,13 +2614,11 @@ class Instance(_Ctype):
         '''
         return libvlc_playlist_play(self, i_id, i_options, ppsz_options)
 
-
     def audio_output_list_get(self):
         '''Gets the list of available audio output modules.
         @return: list of available audio outputs. It must be freed with In case of error, None is returned.
         '''
         return libvlc_audio_output_list_get(self)
-
 
     def audio_output_device_list_get(self, aout):
         '''Gets a list of audio output devices for a given audio output module,
@@ -2433,6 +2635,7 @@ class Instance(_Ctype):
         @version: LibVLC 2.1.0 or later.
         '''
         return libvlc_audio_output_device_list_get(self, str_to_bytes(aout))
+
 
 class LogIterator(_Ctype):
     '''Create a new VLC log iterator.
@@ -2457,13 +2660,10 @@ class LogIterator(_Ctype):
     def __next__(self):
         return self.next()
 
-
-
     def free(self):
         '''Frees memory allocated by L{log_get_iterator}().
         '''
         return libvlc_log_iterator_free(self)
-
 
     def has_next(self):
         '''Always returns zero.
@@ -2471,6 +2671,7 @@ class LogIterator(_Ctype):
         @return: always zero.
         '''
         return libvlc_log_iterator_has_next(self)
+
 
 class Media(_Ctype):
     '''Create a new Media instance.
@@ -2524,11 +2725,9 @@ class Media(_Ctype):
         except ValueError:
             # Media not parsed, no info.
             return None
-        tracks = ( contents[i].contents for i in range(len(contents)) )
+        tracks = (contents[i].contents for i in range(len(contents)))
         # libvlc_media_tracks_release(mediaTrack_pp, n)
         return tracks
-
-
 
     def add_option(self, psz_options):
         '''Add an option to the media.
@@ -2546,7 +2745,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_add_option(self, str_to_bytes(psz_options))
 
-
     def add_option_flag(self, psz_options, i_flags):
         '''Add an option to the media with configurable flags.
         This option will be used to determine how the media_player will
@@ -2562,14 +2760,12 @@ class Media(_Ctype):
         '''
         return libvlc_media_add_option_flag(self, str_to_bytes(psz_options), i_flags)
 
-
     def retain(self):
         '''Retain a reference to a media descriptor object (L{Media}). Use
         L{release}() to decrement the reference count of a
         media descriptor object.
         '''
         return libvlc_media_retain(self)
-
 
     def release(self):
         '''Decrement the reference count of a media descriptor object. If the
@@ -2580,19 +2776,16 @@ class Media(_Ctype):
         '''
         return libvlc_media_release(self)
 
-
     def get_mrl(self):
         '''Get the media resource locator (mrl) from a media descriptor object.
         @return: string with mrl of media descriptor object.
         '''
         return libvlc_media_get_mrl(self)
 
-
     def duplicate(self):
         '''Duplicate a media descriptor object.
         '''
         return libvlc_media_duplicate(self)
-
 
     def get_meta(self, e_meta):
         '''Read the meta of the media.
@@ -2605,7 +2798,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_get_meta(self, e_meta)
 
-
     def set_meta(self, e_meta, psz_value):
         '''Set the meta of the media (this function will not save the meta, call
         L{save_meta} in order to save the meta).
@@ -2614,13 +2806,11 @@ class Media(_Ctype):
         '''
         return libvlc_media_set_meta(self, e_meta, str_to_bytes(psz_value))
 
-
     def save_meta(self):
         '''Save the meta previously set.
         @return: true if the write operation was successful.
         '''
         return libvlc_media_save_meta(self)
-
 
     def get_state(self):
         '''Get current state of media descriptor object. Possible media states are
@@ -2631,14 +2821,12 @@ class Media(_Ctype):
         '''
         return libvlc_media_get_state(self)
 
-
     def get_stats(self, p_stats):
         '''Get the current statistics about the media.
         @param p_stats:: structure that contain the statistics about the media (this structure must be allocated by the caller).
         @return: true if the statistics are available, false otherwise \libvlc_return_bool.
         '''
         return libvlc_media_get_stats(self, p_stats)
-
 
     def subitems(self):
         '''Get subitems of media descriptor object. This will increment
@@ -2656,13 +2844,11 @@ class Media(_Ctype):
         '''
         return libvlc_media_event_manager(self)
 
-
     def get_duration(self):
         '''Get duration (in ms) of media descriptor object item.
         @return: duration of media item or -1 on error.
         '''
         return libvlc_media_get_duration(self)
-
 
     def parse_with_options(self, parse_flag, timeout):
         '''Parse the media asynchronously with options.
@@ -2687,7 +2873,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_parse_with_options(self, parse_flag, timeout)
 
-
     def parse_stop(self):
         '''Stop the parsing of the media
         When the media parsing is stopped, the libvlc_MediaParsedChanged event will
@@ -2696,7 +2881,6 @@ class Media(_Ctype):
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_media_parse_stop(self)
-
 
     def get_parsed_status(self):
         '''Get Parsed status for media descriptor object.
@@ -2707,7 +2891,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_get_parsed_status(self)
 
-
     def set_user_data(self, p_new_user_data):
         '''Sets media descriptor's user_data. user_data is specialized data
         accessed by the host application, VLC.framework uses it as a pointer to
@@ -2716,7 +2899,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_set_user_data(self, p_new_user_data)
 
-
     def get_user_data(self):
         '''Get media descriptor's user_data. user_data is specialized data
         accessed by the host application, VLC.framework uses it as a pointer to
@@ -2724,14 +2906,12 @@ class Media(_Ctype):
         '''
         return libvlc_media_get_user_data(self)
 
-
     def get_type(self):
         '''Get the media type of the media descriptor object.
         @return: media type.
         @version: LibVLC 3.0.0 and later. See L{MediaType}.
         '''
         return libvlc_media_get_type(self)
-
 
     def slaves_add(self, i_type, i_priority, psz_uri):
         '''Add a slave to the current media.
@@ -2748,14 +2928,12 @@ class Media(_Ctype):
         '''
         return libvlc_media_slaves_add(self, i_type, i_priority, str_to_bytes(psz_uri))
 
-
     def slaves_clear(self):
         '''Clear all slaves previously added by L{slaves_add}() or
         internally.
         @version: LibVLC 3.0.0 and later.
         '''
         return libvlc_media_slaves_clear(self)
-
 
     def slaves_get(self, ppp_slaves):
         '''Get a media descriptor's slave list
@@ -2768,7 +2946,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_slaves_get(self, ppp_slaves)
 
-
     def parse(self):
         '''Parse a media.
         This fetches (local) art, meta data and tracks information.
@@ -2780,7 +2957,6 @@ class Media(_Ctype):
         See L{get_tracks_info}.
         '''
         return libvlc_media_parse(self)
-
 
     def parse_async(self):
         '''Parse a media.
@@ -2799,7 +2975,6 @@ class Media(_Ctype):
         '''
         return libvlc_media_parse_async(self)
 
-
     def is_parsed(self):
         '''Return true is the media descriptor object is parsed
         \deprecated This can return true in case of failure.
@@ -2808,7 +2983,6 @@ class Media(_Ctype):
         @return: true if media object has been parsed otherwise it returns false \libvlc_return_bool.
         '''
         return libvlc_media_is_parsed(self)
-
 
     def get_tracks_info(self):
         '''Get media descriptor's elementary streams description
@@ -2821,12 +2995,12 @@ class Media(_Ctype):
         '''
         return libvlc_media_get_tracks_info(self)
 
-
     def player_new_from_media(self):
         '''Create a Media Player object from a Media.
         @return: a new media player object, or None on error.
         '''
         return libvlc_media_player_new_from_media(self)
+
 
 class MediaDiscoverer(_Ctype):
     '''N/A
@@ -2847,7 +3021,6 @@ class MediaDiscoverer(_Ctype):
         '''
         return libvlc_media_discoverer_start(self)
 
-
     def stop(self):
         '''Stop media discovery.
         See L{start}.
@@ -2855,13 +3028,11 @@ class MediaDiscoverer(_Ctype):
         '''
         return libvlc_media_discoverer_stop(self)
 
-
     def release(self):
         '''Release media discover object. If the reference count reaches 0, then
         the object will be released.
         '''
         return libvlc_media_discoverer_release(self)
-
 
     def media_list(self):
         '''Get media service discover media list.
@@ -2869,13 +3040,11 @@ class MediaDiscoverer(_Ctype):
         '''
         return libvlc_media_discoverer_media_list(self)
 
-
     def is_running(self):
         '''Query if media service discover object is running.
         @return: true if running, false if not \libvlc_return_bool.
         '''
         return libvlc_media_discoverer_is_running(self)
-
 
     def localized_name(self):
         '''Get media service discover object its localized name.
@@ -2894,6 +3063,7 @@ class MediaDiscoverer(_Ctype):
         '''
         return libvlc_media_discoverer_event_manager(self)
 
+
 class MediaLibrary(_Ctype):
     '''N/A
     '''
@@ -2910,7 +3080,6 @@ class MediaLibrary(_Ctype):
         '''
         return libvlc_media_library_release(self)
 
-
     def retain(self):
         '''Retain a reference to a media library object. This function will
         increment the reference counting for this object. Use
@@ -2918,19 +3087,18 @@ class MediaLibrary(_Ctype):
         '''
         return libvlc_media_library_retain(self)
 
-
     def load(self):
         '''Load media library.
         @return: 0 on success, -1 on error.
         '''
         return libvlc_media_library_load(self)
 
-
     def media_list(self):
         '''Get media library subitems.
         @return: media list subitems.
         '''
         return libvlc_media_library_media_list(self)
+
 
 class MediaList(_Ctype):
     '''Create a new MediaList instance.
@@ -2962,23 +3130,20 @@ class MediaList(_Ctype):
         @param mrl: a media instance or a MRL.
         @return: 0 on success, -1 if the media list is read-only.
         """
+        mrl = try_fspath(mrl)
         if isinstance(mrl, basestring):
             mrl = (self.get_instance() or get_default_instance()).media_new(mrl)
         return libvlc_media_list_add_media(self, mrl)
-
-
 
     def release(self):
         '''Release media list created with L{new}().
         '''
         return libvlc_media_list_release(self)
 
-
     def retain(self):
         '''Retain reference to a media list.
         '''
         return libvlc_media_list_retain(self)
-
 
     def set_media(self, p_md):
         '''Associate media instance with this media list instance.
@@ -2988,7 +3153,6 @@ class MediaList(_Ctype):
         '''
         return libvlc_media_list_set_media(self, p_md)
 
-
     def media(self):
         '''Get media instance from this media list instance. This action will increase
         the refcount on the media instance.
@@ -2996,7 +3160,6 @@ class MediaList(_Ctype):
         @return: media instance.
         '''
         return libvlc_media_list_media(self)
-
 
     def insert_media(self, p_md, i_pos):
         '''Insert media instance in media list on a position
@@ -3007,7 +3170,6 @@ class MediaList(_Ctype):
         '''
         return libvlc_media_list_insert_media(self, p_md, i_pos)
 
-
     def remove_index(self, i_pos):
         '''Remove media instance from media list on a position
         The L{lock} should be held upon entering this function.
@@ -3015,7 +3177,6 @@ class MediaList(_Ctype):
         @return: 0 on success, -1 if the list is read-only or the item was not found.
         '''
         return libvlc_media_list_remove_index(self, i_pos)
-
 
     def count(self):
         '''Get count on media list items
@@ -3026,7 +3187,6 @@ class MediaList(_Ctype):
 
     def __len__(self):
         return libvlc_media_list_count(self)
-
 
     def item_at_index(self, i_pos):
         '''List media instance in media list at a position
@@ -3043,7 +3203,6 @@ class MediaList(_Ctype):
         for i in range(len(self)):
             yield self[i]
 
-
     def index_of_item(self, p_md):
         '''Find index position of List media instance in media list.
         Warning: the function will return the first matched position.
@@ -3053,19 +3212,16 @@ class MediaList(_Ctype):
         '''
         return libvlc_media_list_index_of_item(self, p_md)
 
-
     def is_readonly(self):
         '''This indicates if this media list is read-only from a user point of view.
         @return: 1 on readonly, 0 on readwrite \libvlc_return_bool.
         '''
         return libvlc_media_list_is_readonly(self)
 
-
     def lock(self):
         '''Get lock on media list items.
         '''
         return libvlc_media_list_lock(self)
-
 
     def unlock(self):
         '''Release lock on media list items
@@ -3080,6 +3236,7 @@ class MediaList(_Ctype):
         @return: libvlc_event_manager.
         '''
         return libvlc_media_list_event_manager(self)
+
 
 class MediaListPlayer(_Ctype):
     '''Create a new MediaListPlayer instance.
@@ -3105,9 +3262,7 @@ class MediaListPlayer(_Ctype):
     def get_instance(self):
         """Return the associated Instance.
         """
-        return self._instance  #PYCHOK expected
-
-
+        return self._instance  # PYCHOK expected
 
     def release(self):
         '''Release a media_list_player after use
@@ -3117,7 +3272,6 @@ class MediaListPlayer(_Ctype):
         has been released, then it should not be used again.
         '''
         return libvlc_media_list_player_release(self)
-
 
     def retain(self):
         '''Retain a reference to a media player list object. Use
@@ -3132,13 +3286,11 @@ class MediaListPlayer(_Ctype):
         '''
         return libvlc_media_list_player_event_manager(self)
 
-
     def set_media_player(self, p_mi):
         '''Replace media player in media_list_player with this instance.
         @param p_mi: media player instance.
         '''
         return libvlc_media_list_player_set_media_player(self, p_mi)
-
 
     def get_media_player(self):
         '''Get media player of the media_list_player instance.
@@ -3146,25 +3298,21 @@ class MediaListPlayer(_Ctype):
         '''
         return libvlc_media_list_player_get_media_player(self)
 
-
     def set_media_list(self, p_mlist):
         '''Set the media list associated with the player.
         @param p_mlist: list of media.
         '''
         return libvlc_media_list_player_set_media_list(self, p_mlist)
 
-
     def play(self):
         '''Play media list.
         '''
         return libvlc_media_list_player_play(self)
 
-
     def pause(self):
         '''Toggle pause (or resume) media list.
         '''
         return libvlc_media_list_player_pause(self)
-
 
     def set_pause(self, do_pause):
         '''Pause or resume media list.
@@ -3173,20 +3321,17 @@ class MediaListPlayer(_Ctype):
         '''
         return libvlc_media_list_player_set_pause(self, do_pause)
 
-
     def is_playing(self):
         '''Is media list playing?
         @return: true for playing and false for not playing \libvlc_return_bool.
         '''
         return libvlc_media_list_player_is_playing(self)
 
-
     def get_state(self):
         '''Get current libvlc_state of media list player.
         @return: L{State} for media list player.
         '''
         return libvlc_media_list_player_get_state(self)
-
 
     def play_item_at_index(self, i_index):
         '''Play media list item at position index.
@@ -3202,7 +3347,6 @@ class MediaListPlayer(_Ctype):
         for i in range(len(self)):
             yield self[i]
 
-
     def play_item(self, p_md):
         '''Play the given media item.
         @param p_md: the media instance.
@@ -3210,12 +3354,10 @@ class MediaListPlayer(_Ctype):
         '''
         return libvlc_media_list_player_play_item(self, p_md)
 
-
     def stop(self):
         '''Stop playing media list.
         '''
         return libvlc_media_list_player_stop(self)
-
 
     def next(self):
         '''Play next item from media list.
@@ -3223,19 +3365,18 @@ class MediaListPlayer(_Ctype):
         '''
         return libvlc_media_list_player_next(self)
 
-
     def previous(self):
         '''Play previous item from media list.
         @return: 0 upon success -1 if there is no previous item.
         '''
         return libvlc_media_list_player_previous(self)
 
-
     def set_playback_mode(self, e_mode):
         '''Sets the playback mode for the playlist.
         @param e_mode: playback mode specification.
         '''
         return libvlc_media_list_player_set_playback_mode(self, e_mode)
+
 
 class MediaPlayer(_Ctype):
     '''Create a new MediaPlayer instance.
@@ -3264,7 +3405,7 @@ class MediaPlayer(_Ctype):
     def get_instance(self):
         """Return the associated Instance.
         """
-        return self._instance  #PYCHOK expected
+        return self._instance  # PYCHOK expected
 
     def set_mrl(self, mrl, *options):
         """Set the MRL to play.
@@ -3309,7 +3450,7 @@ class MediaPlayer(_Ctype):
         except ValueError:
             # Media not parsed, no info.
             return None
-        descr = ( contents[i].contents for i in range(len(contents)) )
+        descr = (contents[i].contents for i in range(len(contents)))
         return descr
 
     def get_full_chapter_descriptions(self, i_chapters_of_title):
@@ -3326,7 +3467,7 @@ class MediaPlayer(_Ctype):
         except ValueError:
             # Media not parsed, no info.
             return None
-        descr = ( contents[i].contents for i in range(len(contents)) )
+        descr = (contents[i].contents for i in range(len(contents)))
         return descr
 
     def video_get_size(self, num=0):
@@ -3391,8 +3532,6 @@ class MediaPlayer(_Ctype):
             return r
         raise VLCException('invalid video number (%s)' % (num,))
 
-
-
     def get_fps(self):
         '''Get movie fps rate
         This function is provided for backward compatibility. It cannot deal with
@@ -3403,18 +3542,15 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_fps(self)
 
-
     def set_agl(self, drawable):
         '''\deprecated Use L{set_nsobject}() instead.
         '''
         return libvlc_media_player_set_agl(self, drawable)
 
-
     def get_agl(self):
         '''\deprecated Use L{get_nsobject}() instead.
         '''
         return libvlc_media_player_get_agl(self)
-
 
     def video_get_title_description(self):
         '''Get the description of available titles.
@@ -3422,14 +3558,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_get_title_description(self)
 
-
     def video_get_chapter_description(self, i_title):
         '''Get the description of available chapters for specific title.
         @param i_title: selected title.
         @return: list containing description of available chapter for title i_title. It must be freed with L{track_description_list_release}().
         '''
         return libvlc_video_get_chapter_description(self, i_title)
-
 
     def video_set_subtitle_file(self, psz_subtitle):
         '''Set new video subtitle file.
@@ -3439,13 +3573,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_subtitle_file(self, str_to_bytes(psz_subtitle))
 
-
     def toggle_teletext(self):
         '''Toggle teletext transparent status on video output.
         \deprecated use L{video_set_teletext}() instead.
         '''
         return libvlc_toggle_teletext(self)
-
 
     def release(self):
         '''Release a media_player after use
@@ -3456,13 +3588,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_release(self)
 
-
     def retain(self):
         '''Retain a reference to a media player object. Use
         L{release}() to decrement reference count.
         '''
         return libvlc_media_player_retain(self)
-
 
     def set_media(self, p_md):
         '''Set the media that will be used by the media_player. If any,
@@ -3470,7 +3600,6 @@ class MediaPlayer(_Ctype):
         @param p_md: the Media. Afterwards the p_md can be safely destroyed.
         '''
         return libvlc_media_player_set_media(self, p_md)
-
 
     def get_media(self):
         '''Get the media used by the media_player.
@@ -3485,20 +3614,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_event_manager(self)
 
-
     def is_playing(self):
         '''is_playing.
         @return: 1 if the media player is playing, 0 otherwise \libvlc_return_bool.
         '''
         return libvlc_media_player_is_playing(self)
 
-
     def play(self):
         '''Play.
         @return: 0 if playback started (and was already started), or -1 on error.
         '''
         return libvlc_media_player_play(self)
-
 
     def set_pause(self, do_pause):
         '''Pause or resume (no effect if there is no media).
@@ -3507,18 +3633,15 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_pause(self, do_pause)
 
-
     def pause(self):
         '''Toggle pause (no effect if there is no media).
         '''
         return libvlc_media_player_pause(self)
 
-
     def stop(self):
         '''Stop (no effect if there is no media).
         '''
         return libvlc_media_player_stop(self)
-
 
     def set_renderer(self, p_item):
         '''Set a renderer to the media player
@@ -3530,7 +3653,6 @@ class MediaPlayer(_Ctype):
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_media_player_set_renderer(self, p_item)
-
 
     def video_set_callbacks(self, lock, unlock, display, opaque):
         '''Set callbacks and private data to render decoded video to a custom area
@@ -3565,7 +3687,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_callbacks(self, lock, unlock, display, opaque)
 
-
     def video_set_format(self, chroma, width, height, pitch):
         '''Set decoded video chroma and dimensions.
         This only works in combination with L{video_set_callbacks}(),
@@ -3579,7 +3700,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_format(self, str_to_bytes(chroma), width, height, pitch)
 
-
     def video_set_format_callbacks(self, setup, cleanup):
         '''Set decoded video chroma and dimensions. This only works in combination with
         L{video_set_callbacks}().
@@ -3588,7 +3708,6 @@ class MediaPlayer(_Ctype):
         @version: LibVLC 2.0.0 or later.
         '''
         return libvlc_video_set_format_callbacks(self, setup, cleanup)
-
 
     def set_nsobject(self, drawable):
         '''Set the NSView handler where the media player should render its video output.
@@ -3617,13 +3736,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_nsobject(self, drawable)
 
-
     def get_nsobject(self):
         '''Get the NSView handler previously set with L{set_nsobject}().
         @return: the NSView handler or 0 if none where set.
         '''
         return libvlc_media_player_get_nsobject(self)
-
 
     def set_xwindow(self, drawable):
         '''Set an X Window System drawable where the media player should render its
@@ -3647,7 +3764,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_xwindow(self, drawable)
 
-
     def get_xwindow(self):
         '''Get the X Window System window identifier previously set with
         L{set_xwindow}(). Note that this will return the identifier
@@ -3657,7 +3773,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_xwindow(self)
 
-
     def get_hwnd(self):
         '''Get the Windows API window handle (HWND) previously set with
         L{set_hwnd}(). The handle will be returned even if LibVLC
@@ -3666,14 +3781,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_hwnd(self)
 
-
     def set_android_context(self, p_awindow_handler):
         '''Set the android context.
         @param p_awindow_handler: org.videolan.libvlc.AWindow jobject owned by the org.videolan.libvlc.MediaPlayer class from the libvlc-android project.
         @version: LibVLC 3.0.0 and later.
         '''
         return libvlc_media_player_set_android_context(self, p_awindow_handler)
-
 
     def set_evas_object(self, p_evas_object):
         '''Set the EFL Evas Object.
@@ -3682,7 +3795,6 @@ class MediaPlayer(_Ctype):
         @version: LibVLC 3.0.0 and later.
         '''
         return libvlc_media_player_set_evas_object(self, p_evas_object)
-
 
     def audio_set_callbacks(self, play, pause, resume, flush, drain, opaque):
         '''Sets callbacks and private data for decoded audio.
@@ -3700,7 +3812,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_set_callbacks(self, play, pause, resume, flush, drain, opaque)
 
-
     def audio_set_volume_callback(self, set_volume):
         '''Set callbacks and private data for decoded audio. This only works in
         combination with L{audio_set_callbacks}().
@@ -3711,7 +3822,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_set_volume_callback(self, set_volume)
 
-
     def audio_set_format_callbacks(self, setup, cleanup):
         '''Sets decoded audio format via callbacks.
         This only works in combination with L{audio_set_callbacks}().
@@ -3721,18 +3831,16 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_set_format_callbacks(self, setup, cleanup)
 
-
     def audio_set_format(self, format, rate, channels):
         '''Sets a fixed decoded audio format.
         This only works in combination with L{audio_set_callbacks}(),
         and is mutually exclusive with L{audio_set_format_callbacks}().
-        @param format: a four-characters string identifying the sample format (e.g. "S16N" or "FL32").
+        @param format: a four-characters string identifying the sample format (e.g. "S16N" or "f32l").
         @param rate: sample rate (expressed in Hz).
         @param channels: channels count.
         @version: LibVLC 2.0.0 or later.
         '''
         return libvlc_audio_set_format(self, str_to_bytes(format), rate, channels)
-
 
     def get_length(self):
         '''Get the current movie length (in ms).
@@ -3740,13 +3848,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_length(self)
 
-
     def get_time(self):
         '''Get the current movie time (in ms).
         @return: the movie time (in ms), or -1 if there is no media.
         '''
         return libvlc_media_player_get_time(self)
-
 
     def set_time(self, i_time):
         '''Set the movie time (in ms). This has no effect if no media is being played.
@@ -3755,13 +3861,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_time(self, i_time)
 
-
     def get_position(self):
         '''Get movie position as percentage between 0.0 and 1.0.
         @return: movie position, or -1. in case of error.
         '''
         return libvlc_media_player_get_position(self)
-
 
     def set_position(self, f_pos):
         '''Set movie position as percentage between 0.0 and 1.0.
@@ -3771,13 +3875,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_position(self, f_pos)
 
-
     def set_chapter(self, i_chapter):
         '''Set movie chapter (if applicable).
         @param i_chapter: chapter number to play.
         '''
         return libvlc_media_player_set_chapter(self, i_chapter)
-
 
     def get_chapter(self):
         '''Get movie chapter.
@@ -3785,20 +3887,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_chapter(self)
 
-
     def get_chapter_count(self):
         '''Get movie chapter count.
         @return: number of chapters in movie, or -1.
         '''
         return libvlc_media_player_get_chapter_count(self)
 
-
     def will_play(self):
         '''Is the player able to play.
         @return: boolean \libvlc_return_bool.
         '''
         return libvlc_media_player_will_play(self)
-
 
     def get_chapter_count_for_title(self, i_title):
         '''Get title chapter count.
@@ -3807,13 +3906,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_chapter_count_for_title(self, i_title)
 
-
     def set_title(self, i_title):
         '''Set movie title.
         @param i_title: title number to play.
         '''
         return libvlc_media_player_set_title(self, i_title)
-
 
     def get_title(self):
         '''Get movie title.
@@ -3821,25 +3918,21 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_title(self)
 
-
     def get_title_count(self):
         '''Get movie title count.
         @return: title number count, or -1.
         '''
         return libvlc_media_player_get_title_count(self)
 
-
     def previous_chapter(self):
         '''Set previous chapter (if applicable).
         '''
         return libvlc_media_player_previous_chapter(self)
 
-
     def next_chapter(self):
         '''Set next chapter (if applicable).
         '''
         return libvlc_media_player_next_chapter(self)
-
 
     def get_rate(self):
         '''Get the requested movie play rate.
@@ -3849,7 +3942,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_rate(self)
 
-
     def set_rate(self, rate):
         '''Set movie play rate.
         @param rate: movie play rate to set.
@@ -3857,13 +3949,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_rate(self, rate)
 
-
     def get_state(self):
         '''Get current movie state.
         @return: the current state of the media player (playing, paused, ...) See L{State}.
         '''
         return libvlc_media_player_get_state(self)
-
 
     def has_vout(self):
         '''How many video outputs does this media player have?
@@ -3871,20 +3961,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_has_vout(self)
 
-
     def is_seekable(self):
         '''Is this media player seekable?
         @return: true if the media player can seek \libvlc_return_bool.
         '''
         return libvlc_media_player_is_seekable(self)
 
-
     def can_pause(self):
         '''Can this media player be paused?
         @return: true if the media player can pause \libvlc_return_bool.
         '''
         return libvlc_media_player_can_pause(self)
-
 
     def program_scrambled(self):
         '''Check if the current program is scrambled.
@@ -3893,12 +3980,10 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_program_scrambled(self)
 
-
     def next_frame(self):
         '''Display the next frame (if supported).
         '''
         return libvlc_media_player_next_frame(self)
-
 
     def navigate(self, navigate):
         '''Navigate through DVD Menu.
@@ -3907,7 +3992,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_navigate(self, navigate)
 
-
     def set_video_title_display(self, position, timeout):
         '''Set if, and how, the video title will be shown when media is played.
         @param position: position at which to display the title, or libvlc_position_disable to prevent the title from being displayed.
@@ -3915,7 +3999,6 @@ class MediaPlayer(_Ctype):
         @version: libVLC 2.1.0 or later.
         '''
         return libvlc_media_player_set_video_title_display(self, position, timeout)
-
 
     def add_slave(self, i_type, psz_uri, b_select):
         '''Add a slave to the current media player.
@@ -3929,14 +4012,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_add_slave(self, i_type, str_to_bytes(psz_uri), b_select)
 
-
     def toggle_fullscreen(self):
         '''Toggle fullscreen status on non-embedded video outputs.
         @warning: The same limitations applies to this function
         as to L{set_fullscreen}().
         '''
         return libvlc_toggle_fullscreen(self)
-
 
     def set_fullscreen(self, b_fullscreen):
         '''Enable or disable fullscreen.
@@ -3950,13 +4031,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_set_fullscreen(self, b_fullscreen)
 
-
     def get_fullscreen(self):
         '''Get current fullscreen status.
         @return: the fullscreen status (boolean) \libvlc_return_bool.
         '''
         return libvlc_get_fullscreen(self)
-
 
     def video_set_key_input(self, on):
         '''Enable or disable key press events handling, according to the LibVLC hotkeys
@@ -3971,7 +4050,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_key_input(self, on)
 
-
     def video_set_mouse_input(self, on):
         '''Enable or disable mouse click events handling. By default, those events are
         handled. This is needed for DVD menus to work, as well as a few video
@@ -3982,14 +4060,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_mouse_input(self, on)
 
-
     def video_get_scale(self):
         '''Get the current video scaling factor.
         See also L{video_set_scale}().
         @return: the currently configured zoom factor, or 0. if the video is set to fit to the output window/drawable automatically.
         '''
         return libvlc_video_get_scale(self)
-
 
     def video_set_scale(self, f_factor):
         '''Set the video scaling factor. That is the ratio of the number of pixels on
@@ -4001,20 +4077,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_scale(self, f_factor)
 
-
     def video_get_aspect_ratio(self):
         '''Get current video aspect ratio.
         @return: the video aspect ratio or None if unspecified (the result must be released with free() or L{free}()).
         '''
         return libvlc_video_get_aspect_ratio(self)
 
-
     def video_set_aspect_ratio(self, psz_aspect):
         '''Set new video aspect ratio.
         @param psz_aspect: new video aspect-ratio or None to reset to default @note Invalid aspect ratios are ignored.
         '''
         return libvlc_video_set_aspect_ratio(self, str_to_bytes(psz_aspect))
-
 
     def video_update_viewpoint(self, p_viewpoint, b_absolute):
         '''Update the video viewpoint information.
@@ -4026,20 +4099,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_update_viewpoint(self, p_viewpoint, b_absolute)
 
-
     def video_get_spu(self):
         '''Get current video subtitle.
         @return: the video subtitle selected, or -1 if none.
         '''
         return libvlc_video_get_spu(self)
 
-
     def video_get_spu_count(self):
         '''Get the number of available video subtitles.
         @return: the number of available video subtitles.
         '''
         return libvlc_video_get_spu_count(self)
-
 
     def video_set_spu(self, i_spu):
         '''Set new video subtitle.
@@ -4048,7 +4118,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_spu(self, i_spu)
 
-
     def video_get_spu_delay(self):
         '''Get the current subtitle delay. Positive values means subtitles are being
         displayed later, negative values earlier.
@@ -4056,7 +4125,6 @@ class MediaPlayer(_Ctype):
         @version: LibVLC 2.0.0 or later.
         '''
         return libvlc_video_get_spu_delay(self)
-
 
     def video_set_spu_delay(self, i_delay):
         '''Set the subtitle delay. This affects the timing of when the subtitle will
@@ -4069,20 +4137,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_spu_delay(self, i_delay)
 
-
     def video_get_crop_geometry(self):
         '''Get current crop filter geometry.
         @return: the crop filter geometry or None if unset.
         '''
         return libvlc_video_get_crop_geometry(self)
 
-
     def video_set_crop_geometry(self, psz_geometry):
         '''Set new crop filter geometry.
         @param psz_geometry: new crop filter geometry (None to unset).
         '''
         return libvlc_video_set_crop_geometry(self, str_to_bytes(psz_geometry))
-
 
     def video_get_teletext(self):
         '''Get current teletext page requested or 0 if it's disabled.
@@ -4092,7 +4157,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_get_teletext(self)
 
-
     def video_set_teletext(self, i_page):
         '''Set new teletext page to retrieve.
         This function can also be used to send a teletext key.
@@ -4100,13 +4164,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_teletext(self, i_page)
 
-
     def video_get_track_count(self):
         '''Get number of available video tracks.
         @return: the number of available video tracks (int).
         '''
         return libvlc_video_get_track_count(self)
-
 
     def video_get_track(self):
         '''Get current video track.
@@ -4114,14 +4176,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_get_track(self)
 
-
     def video_set_track(self, i_track):
         '''Set video track.
         @param i_track: the track ID (i_id field from track description).
         @return: 0 on success, -1 if out of range.
         '''
         return libvlc_video_set_track(self, i_track)
-
 
     def video_take_snapshot(self, num, psz_filepath, i_width, i_height):
         '''Take a snapshot of the current video window.
@@ -4135,13 +4195,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_take_snapshot(self, num, str_to_bytes(psz_filepath), i_width, i_height)
 
-
     def video_set_deinterlace(self, psz_mode):
         '''Enable or disable deinterlace filter.
         @param psz_mode: type of deinterlace filter, None to disable.
         '''
         return libvlc_video_set_deinterlace(self, str_to_bytes(psz_mode))
-
 
     def video_get_marquee_int(self, option):
         '''Get an integer marquee option value.
@@ -4149,13 +4207,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_get_marquee_int(self, option)
 
-
     def video_get_marquee_string(self, option):
         '''Get a string marquee option value.
         @param option: marq option to get See libvlc_video_marquee_string_option_t.
         '''
         return libvlc_video_get_marquee_string(self, option)
-
 
     def video_set_marquee_int(self, option, i_val):
         '''Enable, disable or set an integer marquee option
@@ -4166,7 +4222,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_marquee_int(self, option, i_val)
 
-
     def video_set_marquee_string(self, option, psz_text):
         '''Set a marquee string option.
         @param option: marq option to set See libvlc_video_marquee_string_option_t.
@@ -4174,13 +4229,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_marquee_string(self, option, str_to_bytes(psz_text))
 
-
     def video_get_logo_int(self, option):
         '''Get integer logo option.
         @param option: logo option to get, values of L{VideoLogoOption}.
         '''
         return libvlc_video_get_logo_int(self, option)
-
 
     def video_set_logo_int(self, option, value):
         '''Set logo option as integer. Options that take a different type value
@@ -4192,7 +4245,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_logo_int(self, option, value)
 
-
     def video_set_logo_string(self, option, psz_value):
         '''Set logo option as string. Options that take a different type value
         are ignored.
@@ -4201,14 +4253,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_logo_string(self, option, str_to_bytes(psz_value))
 
-
     def video_get_adjust_int(self, option):
         '''Get integer adjust option.
         @param option: adjust option to get, values of L{VideoAdjustOption}.
         @version: LibVLC 1.1.1 and later.
         '''
         return libvlc_video_get_adjust_int(self, option)
-
 
     def video_set_adjust_int(self, option, value):
         '''Set adjust option as integer. Options that take a different type value
@@ -4221,14 +4271,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_adjust_int(self, option, value)
 
-
     def video_get_adjust_float(self, option):
         '''Get float adjust option.
         @param option: adjust option to get, values of L{VideoAdjustOption}.
         @version: LibVLC 1.1.1 and later.
         '''
         return libvlc_video_get_adjust_float(self, option)
-
 
     def video_set_adjust_float(self, option, value):
         '''Set adjust option as float. Options that take a different type value
@@ -4239,7 +4287,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_video_set_adjust_float(self, option, value)
 
-
     def audio_output_set(self, psz_name):
         '''Selects an audio output module.
         @note: Any change will take be effect only after playback is stopped and
@@ -4248,7 +4295,6 @@ class MediaPlayer(_Ctype):
         @return: 0 if function succeeded, -1 on error.
         '''
         return libvlc_audio_output_set(self, str_to_bytes(psz_name))
-
 
     def audio_output_device_enum(self):
         '''Gets a list of potential audio output devices,
@@ -4263,7 +4309,6 @@ class MediaPlayer(_Ctype):
         @version: LibVLC 2.2.0 or later.
         '''
         return libvlc_audio_output_device_enum(self)
-
 
     def audio_output_device_set(self, module, device_id):
         '''Configures an explicit audio output device.
@@ -4292,7 +4337,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_output_device_set(self, str_to_bytes(module), str_to_bytes(device_id))
 
-
     def audio_output_device_get(self):
         '''Get the current audio output device identifier.
         This complements L{audio_output_device_set}().
@@ -4310,12 +4354,10 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_output_device_get(self)
 
-
     def audio_toggle_mute(self):
         '''Toggle mute status.
         '''
         return libvlc_audio_toggle_mute(self)
-
 
     def audio_get_mute(self):
         '''Get current mute status.
@@ -4323,20 +4365,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_get_mute(self)
 
-
     def audio_set_mute(self, status):
         '''Set mute status.
         @param status: If status is true then mute, otherwise unmute @warning This function does not always work. If there are no active audio playback stream, the mute status might not be available. If digital pass-through (S/PDIF, HDMI...) is in use, muting may be unapplicable. Also some audio output plugins do not support muting at all. @note To force silent playback, disable all audio tracks. This is more efficient and reliable than mute.
         '''
         return libvlc_audio_set_mute(self, status)
 
-
     def audio_get_volume(self):
         '''Get current software audio volume.
         @return: the software volume in percents (0 = mute, 100 = nominal / 0dB).
         '''
         return libvlc_audio_get_volume(self)
-
 
     def audio_set_volume(self, i_volume):
         '''Set current software audio volume.
@@ -4345,20 +4384,17 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_set_volume(self, i_volume)
 
-
     def audio_get_track_count(self):
         '''Get number of available audio tracks.
         @return: the number of available audio tracks (int), or -1 if unavailable.
         '''
         return libvlc_audio_get_track_count(self)
 
-
     def audio_get_track(self):
         '''Get current audio track.
         @return: the audio track ID or -1 if no active input.
         '''
         return libvlc_audio_get_track(self)
-
 
     def audio_set_track(self, i_track):
         '''Set current audio track.
@@ -4367,13 +4403,11 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_set_track(self, i_track)
 
-
     def audio_get_channel(self):
         '''Get current audio channel.
         @return: the audio channel See L{AudioOutputChannel}.
         '''
         return libvlc_audio_get_channel(self)
-
 
     def audio_set_channel(self, channel):
         '''Set current audio channel.
@@ -4382,14 +4416,12 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_audio_set_channel(self, channel)
 
-
     def audio_get_delay(self):
         '''Get current audio delay.
         @return: the audio delay (microseconds).
         @version: LibVLC 1.1.1 or later.
         '''
         return libvlc_audio_get_delay(self)
-
 
     def audio_set_delay(self, i_delay):
         '''Set current audio delay. The audio delay will be reset to zero each time the media changes.
@@ -4398,7 +4430,6 @@ class MediaPlayer(_Ctype):
         @version: LibVLC 1.1.1 or later.
         '''
         return libvlc_audio_set_delay(self, i_delay)
-
 
     def set_equalizer(self, p_equalizer):
         '''Apply new equalizer settings to a media player.
@@ -4422,7 +4453,6 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_set_equalizer(self, p_equalizer)
 
-
     def get_role(self):
         '''Gets the media role.
         @return: the media player role (\ref libvlc_media_player_role_t).
@@ -4430,13 +4460,13 @@ class MediaPlayer(_Ctype):
         '''
         return libvlc_media_player_get_role(self)
 
-
     def set_role(self, role):
         '''Sets the media role.
         @param role: the media player role (\ref libvlc_media_player_role_t).
         @return: 0 on success, -1 on error.
         '''
         return libvlc_media_player_set_role(self, role)
+
 
 class Renderer(_Ctype):
     '''N/A
@@ -4457,13 +4487,11 @@ class Renderer(_Ctype):
         '''
         return libvlc_renderer_item_hold(self)
 
-
     def release(self):
         '''Releases a renderer item, i.e. decrements its reference counter.
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_renderer_item_release(self)
-
 
     def name(self):
         '''Get the human readable name of a renderer item.
@@ -4471,7 +4499,6 @@ class Renderer(_Ctype):
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_renderer_item_name(self)
-
 
     def type(self):
         '''Get the type (not translated) of a renderer item. For now, the type can only
@@ -4481,14 +4508,12 @@ class Renderer(_Ctype):
         '''
         return libvlc_renderer_item_type(self)
 
-
     def icon_uri(self):
         '''Get the icon uri of a renderer item.
         @return: the uri of the item's icon (can be None, must *not* be freed).
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_renderer_item_icon_uri(self)
-
 
     def flags(self):
         '''Get the flags of a renderer item
@@ -4498,6 +4523,7 @@ class Renderer(_Ctype):
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_renderer_item_flags(self)
+
 
 class RendererDiscoverer(_Ctype):
     '''N/A
@@ -4514,7 +4540,6 @@ class RendererDiscoverer(_Ctype):
         '''
         return libvlc_renderer_discoverer_release(self)
 
-
     def start(self):
         '''Start renderer discovery
         To stop it, call L{stop}() or
@@ -4524,7 +4549,6 @@ class RendererDiscoverer(_Ctype):
         @version: LibVLC 3.0.0 or later.
         '''
         return libvlc_renderer_discoverer_start(self)
-
 
     def stop(self):
         '''Stop renderer discovery.
@@ -4549,7 +4573,7 @@ class RendererDiscoverer(_Ctype):
         return libvlc_renderer_discoverer_event_manager(self)
 
 
- # LibVLC __version__ functions #
+# LibVLC __version__ functions #
 
 def libvlc_clearerr():
     '''Clears the LibVLC error status for the current thread. This is optional.
@@ -4558,8 +4582,9 @@ def libvlc_clearerr():
     '''
     f = _Cfunctions.get('libvlc_clearerr', None) or \
         _Cfunction('libvlc_clearerr', (), None,
-                    None)
+                   None)
     return f()
+
 
 def libvlc_vprinterr(fmt, ap):
     '''Sets the LibVLC error status and message for the current thread.
@@ -4570,8 +4595,9 @@ def libvlc_vprinterr(fmt, ap):
     '''
     f = _Cfunctions.get('libvlc_vprinterr', None) or \
         _Cfunction('libvlc_vprinterr', ((1,), (1,),), None,
-                    ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p)
+                   ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p)
     return f(fmt, ap)
+
 
 def libvlc_new(argc, argv):
     '''Create and initialize a libvlc instance.
@@ -4612,8 +4638,9 @@ def libvlc_new(argc, argv):
     '''
     f = _Cfunctions.get('libvlc_new', None) or \
         _Cfunction('libvlc_new', ((1,), (1,),), class_result(Instance),
-                    ctypes.c_void_p, ctypes.c_int, ListPOINTER(ctypes.c_char_p))
+                   ctypes.c_void_p, ctypes.c_int, ListPOINTER(ctypes.c_char_p))
     return f(argc, argv)
+
 
 def libvlc_release(p_instance):
     '''Decrement the reference count of a libvlc instance, and destroy it
@@ -4622,8 +4649,9 @@ def libvlc_release(p_instance):
     '''
     f = _Cfunctions.get('libvlc_release', None) or \
         _Cfunction('libvlc_release', ((1,),), None,
-                    None, Instance)
+                   None, Instance)
     return f(p_instance)
+
 
 def libvlc_retain(p_instance):
     '''Increments the reference count of a libvlc instance.
@@ -4632,8 +4660,9 @@ def libvlc_retain(p_instance):
     '''
     f = _Cfunctions.get('libvlc_retain', None) or \
         _Cfunction('libvlc_retain', ((1,),), None,
-                    None, Instance)
+                   None, Instance)
     return f(p_instance)
+
 
 def libvlc_add_intf(p_instance, name):
     '''Try to start a user interface for the libvlc instance.
@@ -4643,8 +4672,9 @@ def libvlc_add_intf(p_instance, name):
     '''
     f = _Cfunctions.get('libvlc_add_intf', None) or \
         _Cfunction('libvlc_add_intf', ((1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p)
     return f(p_instance, name)
+
 
 def libvlc_set_user_agent(p_instance, name, http):
     '''Sets the application name. LibVLC passes this as the user agent string
@@ -4656,8 +4686,9 @@ def libvlc_set_user_agent(p_instance, name, http):
     '''
     f = _Cfunctions.get('libvlc_set_user_agent', None) or \
         _Cfunction('libvlc_set_user_agent', ((1,), (1,), (1,),), None,
-                    None, Instance, ctypes.c_char_p, ctypes.c_char_p)
+                   None, Instance, ctypes.c_char_p, ctypes.c_char_p)
     return f(p_instance, name, http)
+
 
 def libvlc_set_app_id(p_instance, id, version, icon):
     '''Sets some meta-information about the application.
@@ -4670,8 +4701,9 @@ def libvlc_set_app_id(p_instance, id, version, icon):
     '''
     f = _Cfunctions.get('libvlc_set_app_id', None) or \
         _Cfunction('libvlc_set_app_id', ((1,), (1,), (1,), (1,),), None,
-                    None, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p)
+                   None, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p)
     return f(p_instance, id, version, icon)
+
 
 def libvlc_get_version():
     '''Retrieve libvlc version.
@@ -4680,8 +4712,9 @@ def libvlc_get_version():
     '''
     f = _Cfunctions.get('libvlc_get_version', None) or \
         _Cfunction('libvlc_get_version', (), None,
-                    ctypes.c_char_p)
+                   ctypes.c_char_p)
     return f()
+
 
 def libvlc_get_compiler():
     '''Retrieve libvlc compiler version.
@@ -4690,8 +4723,9 @@ def libvlc_get_compiler():
     '''
     f = _Cfunctions.get('libvlc_get_compiler', None) or \
         _Cfunction('libvlc_get_compiler', (), None,
-                    ctypes.c_char_p)
+                   ctypes.c_char_p)
     return f()
+
 
 def libvlc_get_changeset():
     '''Retrieve libvlc changeset.
@@ -4700,8 +4734,9 @@ def libvlc_get_changeset():
     '''
     f = _Cfunctions.get('libvlc_get_changeset', None) or \
         _Cfunction('libvlc_get_changeset', (), None,
-                    ctypes.c_char_p)
+                   ctypes.c_char_p)
     return f()
+
 
 def libvlc_free(ptr):
     '''Frees an heap allocation returned by a LibVLC function.
@@ -4711,8 +4746,9 @@ def libvlc_free(ptr):
     '''
     f = _Cfunctions.get('libvlc_free', None) or \
         _Cfunction('libvlc_free', ((1,),), None,
-                    None, ctypes.c_void_p)
+                   None, ctypes.c_void_p)
     return f(ptr)
+
 
 def libvlc_event_attach(p_event_manager, i_event_type, f_callback, user_data):
     '''Register for an event notification.
@@ -4724,8 +4760,9 @@ def libvlc_event_attach(p_event_manager, i_event_type, f_callback, user_data):
     '''
     f = _Cfunctions.get('libvlc_event_attach', None) or \
         _Cfunction('libvlc_event_attach', ((1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, EventManager, ctypes.c_uint, Callback, ctypes.c_void_p)
+                   ctypes.c_int, EventManager, ctypes.c_uint, Callback, ctypes.c_void_p)
     return f(p_event_manager, i_event_type, f_callback, user_data)
+
 
 def libvlc_event_detach(p_event_manager, i_event_type, f_callback, p_user_data):
     '''Unregister an event notification.
@@ -4736,8 +4773,9 @@ def libvlc_event_detach(p_event_manager, i_event_type, f_callback, p_user_data):
     '''
     f = _Cfunctions.get('libvlc_event_detach', None) or \
         _Cfunction('libvlc_event_detach', ((1,), (1,), (1,), (1,),), None,
-                    None, EventManager, ctypes.c_uint, Callback, ctypes.c_void_p)
+                   None, EventManager, ctypes.c_uint, Callback, ctypes.c_void_p)
     return f(p_event_manager, i_event_type, f_callback, p_user_data)
+
 
 def libvlc_event_type_name(event_type):
     '''Get an event's type name.
@@ -4745,8 +4783,9 @@ def libvlc_event_type_name(event_type):
     '''
     f = _Cfunctions.get('libvlc_event_type_name', None) or \
         _Cfunction('libvlc_event_type_name', ((1,),), None,
-                    ctypes.c_char_p, ctypes.c_uint)
+                   ctypes.c_char_p, ctypes.c_uint)
     return f(event_type)
+
 
 def libvlc_log_get_context(ctx):
     '''Gets log message debug infos.
@@ -4762,8 +4801,10 @@ def libvlc_log_get_context(ctx):
     '''
     f = _Cfunctions.get('libvlc_log_get_context', None) or \
         _Cfunction('libvlc_log_get_context', ((1,), (2,), (2,), (2,),), None,
-                    None, Log_ptr, ListPOINTER(ctypes.c_char_p), ListPOINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_uint))
+                   None, Log_ptr, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p),
+                   ctypes.POINTER(ctypes.c_uint))
     return f(ctx)
+
 
 def libvlc_log_get_object(ctx, id):
     '''Gets log message info.
@@ -4783,8 +4824,10 @@ def libvlc_log_get_object(ctx, id):
     '''
     f = _Cfunctions.get('libvlc_log_get_object', None) or \
         _Cfunction('libvlc_log_get_object', ((1,), (2,), (2,), (1,),), None,
-                    None, Log_ptr, ListPOINTER(ctypes.c_char_p), ListPOINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_uint))
+                   None, Log_ptr, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_char_p),
+                   ctypes.POINTER(ctypes.c_uint))
     return f(ctx, id)
+
 
 def libvlc_log_unset(p_instance):
     '''Unsets the logging callback.
@@ -4798,8 +4841,9 @@ def libvlc_log_unset(p_instance):
     '''
     f = _Cfunctions.get('libvlc_log_unset', None) or \
         _Cfunction('libvlc_log_unset', ((1,),), None,
-                    None, Instance)
+                   None, Instance)
     return f(p_instance)
+
 
 def libvlc_log_set(p_instance, cb, data):
     '''Sets the logging callback for a LibVLC instance.
@@ -4812,8 +4856,9 @@ def libvlc_log_set(p_instance, cb, data):
     '''
     f = _Cfunctions.get('libvlc_log_set', None) or \
         _Cfunction('libvlc_log_set', ((1,), (1,), (1,),), None,
-                    None, Instance, LogCb, ctypes.c_void_p)
+                   None, Instance, LogCb, ctypes.c_void_p)
     return f(p_instance, cb, data)
+
 
 def libvlc_log_set_file(p_instance, stream):
     '''Sets up logging to a file.
@@ -4823,8 +4868,9 @@ def libvlc_log_set_file(p_instance, stream):
     '''
     f = _Cfunctions.get('libvlc_log_set_file', None) or \
         _Cfunction('libvlc_log_set_file', ((1,), (1,),), None,
-                    None, Instance, FILE_ptr)
+                   None, Instance, FILE_ptr)
     return f(p_instance, stream)
+
 
 def libvlc_module_description_list_release(p_list):
     '''Release a list of module descriptions.
@@ -4832,8 +4878,9 @@ def libvlc_module_description_list_release(p_list):
     '''
     f = _Cfunctions.get('libvlc_module_description_list_release', None) or \
         _Cfunction('libvlc_module_description_list_release', ((1,),), None,
-                    None, ctypes.POINTER(ModuleDescription))
+                   None, ctypes.POINTER(ModuleDescription))
     return f(p_list)
+
 
 def libvlc_audio_filter_list_get(p_instance):
     '''Returns a list of audio filters that are available.
@@ -4842,8 +4889,9 @@ def libvlc_audio_filter_list_get(p_instance):
     '''
     f = _Cfunctions.get('libvlc_audio_filter_list_get', None) or \
         _Cfunction('libvlc_audio_filter_list_get', ((1,),), None,
-                    ctypes.POINTER(ModuleDescription), Instance)
+                   ctypes.POINTER(ModuleDescription), Instance)
     return f(p_instance)
+
 
 def libvlc_video_filter_list_get(p_instance):
     '''Returns a list of video filters that are available.
@@ -4852,8 +4900,9 @@ def libvlc_video_filter_list_get(p_instance):
     '''
     f = _Cfunctions.get('libvlc_video_filter_list_get', None) or \
         _Cfunction('libvlc_video_filter_list_get', ((1,),), None,
-                    ctypes.POINTER(ModuleDescription), Instance)
+                   ctypes.POINTER(ModuleDescription), Instance)
     return f(p_instance)
+
 
 def libvlc_clock():
     '''Return the current time as defined by LibVLC. The unit is the microsecond.
@@ -4865,8 +4914,9 @@ def libvlc_clock():
     '''
     f = _Cfunctions.get('libvlc_clock', None) or \
         _Cfunction('libvlc_clock', (), None,
-                    ctypes.c_int64)
+                   ctypes.c_int64)
     return f()
+
 
 def libvlc_media_discoverer_new(p_inst, psz_name):
     '''Create a media discoverer object by name.
@@ -4884,8 +4934,9 @@ def libvlc_media_discoverer_new(p_inst, psz_name):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_new', None) or \
         _Cfunction('libvlc_media_discoverer_new', ((1,), (1,),), class_result(MediaDiscoverer),
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_inst, psz_name)
+
 
 def libvlc_media_discoverer_start(p_mdis):
     '''Start media discovery.
@@ -4898,8 +4949,9 @@ def libvlc_media_discoverer_start(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_start', None) or \
         _Cfunction('libvlc_media_discoverer_start', ((1,),), None,
-                    ctypes.c_int, MediaDiscoverer)
+                   ctypes.c_int, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_media_discoverer_stop(p_mdis):
     '''Stop media discovery.
@@ -4909,8 +4961,9 @@ def libvlc_media_discoverer_stop(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_stop', None) or \
         _Cfunction('libvlc_media_discoverer_stop', ((1,),), None,
-                    None, MediaDiscoverer)
+                   None, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_media_discoverer_release(p_mdis):
     '''Release media discover object. If the reference count reaches 0, then
@@ -4919,8 +4972,9 @@ def libvlc_media_discoverer_release(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_release', None) or \
         _Cfunction('libvlc_media_discoverer_release', ((1,),), None,
-                    None, MediaDiscoverer)
+                   None, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_media_discoverer_media_list(p_mdis):
     '''Get media service discover media list.
@@ -4929,8 +4983,9 @@ def libvlc_media_discoverer_media_list(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_media_list', None) or \
         _Cfunction('libvlc_media_discoverer_media_list', ((1,),), class_result(MediaList),
-                    ctypes.c_void_p, MediaDiscoverer)
+                   ctypes.c_void_p, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_media_discoverer_is_running(p_mdis):
     '''Query if media service discover object is running.
@@ -4939,8 +4994,9 @@ def libvlc_media_discoverer_is_running(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_is_running', None) or \
         _Cfunction('libvlc_media_discoverer_is_running', ((1,),), None,
-                    ctypes.c_int, MediaDiscoverer)
+                   ctypes.c_int, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_media_discoverer_list_get(p_inst, i_cat, ppp_services):
     '''Get media discoverer services by category.
@@ -4952,8 +5008,10 @@ def libvlc_media_discoverer_list_get(p_inst, i_cat, ppp_services):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_list_get', None) or \
         _Cfunction('libvlc_media_discoverer_list_get', ((1,), (1,), (1,),), None,
-                    ctypes.c_size_t, Instance, MediaDiscovererCategory, ctypes.POINTER(ctypes.POINTER(MediaDiscovererDescription)))
+                   ctypes.c_size_t, Instance, MediaDiscovererCategory,
+                   ctypes.POINTER(ctypes.POINTER(MediaDiscovererDescription)))
     return f(p_inst, i_cat, ppp_services)
+
 
 def libvlc_media_discoverer_list_release(pp_services, i_count):
     '''Release an array of media discoverer services.
@@ -4963,8 +5021,9 @@ def libvlc_media_discoverer_list_release(pp_services, i_count):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_list_release', None) or \
         _Cfunction('libvlc_media_discoverer_list_release', ((1,), (1,),), None,
-                    None, ctypes.POINTER(MediaDiscovererDescription), ctypes.c_size_t)
+                   None, ctypes.POINTER(MediaDiscovererDescription), ctypes.c_size_t)
     return f(pp_services, i_count)
+
 
 def libvlc_dialog_set_context(p_id, p_context):
     '''Associate an opaque pointer with the dialog id.
@@ -4972,8 +5031,9 @@ def libvlc_dialog_set_context(p_id, p_context):
     '''
     f = _Cfunctions.get('libvlc_dialog_set_context', None) or \
         _Cfunction('libvlc_dialog_set_context', ((1,), (1,),), None,
-                    None, ctypes.c_void_p, ctypes.c_void_p)
+                   None, ctypes.c_void_p, ctypes.c_void_p)
     return f(p_id, p_context)
+
 
 def libvlc_dialog_get_context(p_id):
     '''Return the opaque pointer associated with the dialog id.
@@ -4981,8 +5041,9 @@ def libvlc_dialog_get_context(p_id):
     '''
     f = _Cfunctions.get('libvlc_dialog_get_context', None) or \
         _Cfunction('libvlc_dialog_get_context', ((1,),), None,
-                    ctypes.c_void_p, ctypes.c_void_p)
+                   ctypes.c_void_p, ctypes.c_void_p)
     return f(p_id)
+
 
 def libvlc_dialog_post_login(p_id, psz_username, psz_password, b_store):
     '''Post a login answer
@@ -4997,8 +5058,9 @@ def libvlc_dialog_post_login(p_id, psz_username, psz_password, b_store):
     '''
     f = _Cfunctions.get('libvlc_dialog_post_login', None) or \
         _Cfunction('libvlc_dialog_post_login', ((1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_bool)
+                   ctypes.c_int, ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_bool)
     return f(p_id, psz_username, psz_password, b_store)
+
 
 def libvlc_dialog_post_action(p_id, i_action):
     '''Post a question answer
@@ -5011,8 +5073,9 @@ def libvlc_dialog_post_action(p_id, i_action):
     '''
     f = _Cfunctions.get('libvlc_dialog_post_action', None) or \
         _Cfunction('libvlc_dialog_post_action', ((1,), (1,),), None,
-                    ctypes.c_int, ctypes.c_void_p, ctypes.c_int)
+                   ctypes.c_int, ctypes.c_void_p, ctypes.c_int)
     return f(p_id, i_action)
+
 
 def libvlc_dialog_dismiss(p_id):
     '''Dismiss a dialog
@@ -5024,8 +5087,9 @@ def libvlc_dialog_dismiss(p_id):
     '''
     f = _Cfunctions.get('libvlc_dialog_dismiss', None) or \
         _Cfunction('libvlc_dialog_dismiss', ((1,),), None,
-                    ctypes.c_int, ctypes.c_void_p)
+                   ctypes.c_int, ctypes.c_void_p)
     return f(p_id)
+
 
 def libvlc_media_library_new(p_instance):
     '''Create an new Media Library object.
@@ -5034,8 +5098,9 @@ def libvlc_media_library_new(p_instance):
     '''
     f = _Cfunctions.get('libvlc_media_library_new', None) or \
         _Cfunction('libvlc_media_library_new', ((1,),), class_result(MediaLibrary),
-                    ctypes.c_void_p, Instance)
+                   ctypes.c_void_p, Instance)
     return f(p_instance)
+
 
 def libvlc_media_library_release(p_mlib):
     '''Release media library object. This functions decrements the
@@ -5045,8 +5110,9 @@ def libvlc_media_library_release(p_mlib):
     '''
     f = _Cfunctions.get('libvlc_media_library_release', None) or \
         _Cfunction('libvlc_media_library_release', ((1,),), None,
-                    None, MediaLibrary)
+                   None, MediaLibrary)
     return f(p_mlib)
+
 
 def libvlc_media_library_retain(p_mlib):
     '''Retain a reference to a media library object. This function will
@@ -5056,8 +5122,9 @@ def libvlc_media_library_retain(p_mlib):
     '''
     f = _Cfunctions.get('libvlc_media_library_retain', None) or \
         _Cfunction('libvlc_media_library_retain', ((1,),), None,
-                    None, MediaLibrary)
+                   None, MediaLibrary)
     return f(p_mlib)
+
 
 def libvlc_media_library_load(p_mlib):
     '''Load media library.
@@ -5066,8 +5133,9 @@ def libvlc_media_library_load(p_mlib):
     '''
     f = _Cfunctions.get('libvlc_media_library_load', None) or \
         _Cfunction('libvlc_media_library_load', ((1,),), None,
-                    ctypes.c_int, MediaLibrary)
+                   ctypes.c_int, MediaLibrary)
     return f(p_mlib)
+
 
 def libvlc_media_library_media_list(p_mlib):
     '''Get media library subitems.
@@ -5076,8 +5144,9 @@ def libvlc_media_library_media_list(p_mlib):
     '''
     f = _Cfunctions.get('libvlc_media_library_media_list', None) or \
         _Cfunction('libvlc_media_library_media_list', ((1,),), class_result(MediaList),
-                    ctypes.c_void_p, MediaLibrary)
+                   ctypes.c_void_p, MediaLibrary)
     return f(p_mlib)
+
 
 def libvlc_vlm_release(p_instance):
     '''Release the vlm instance related to the given L{Instance}.
@@ -5085,8 +5154,9 @@ def libvlc_vlm_release(p_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_release', None) or \
         _Cfunction('libvlc_vlm_release', ((1,),), None,
-                    None, Instance)
+                   None, Instance)
     return f(p_instance)
+
 
 def libvlc_vlm_add_broadcast(p_instance, psz_name, psz_input, psz_output, i_options, ppsz_options, b_enabled, b_loop):
     '''Add a broadcast, with one input.
@@ -5102,8 +5172,10 @@ def libvlc_vlm_add_broadcast(p_instance, psz_name, psz_input, psz_output, i_opti
     '''
     f = _Cfunctions.get('libvlc_vlm_add_broadcast', None) or \
         _Cfunction('libvlc_vlm_add_broadcast', ((1,), (1,), (1,), (1,), (1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ListPOINTER(ctypes.c_char_p), ctypes.c_int, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
+                   ListPOINTER(ctypes.c_char_p), ctypes.c_int, ctypes.c_int)
     return f(p_instance, psz_name, psz_input, psz_output, i_options, ppsz_options, b_enabled, b_loop)
+
 
 def libvlc_vlm_add_vod(p_instance, psz_name, psz_input, i_options, ppsz_options, b_enabled, psz_mux):
     '''Add a vod, with one input.
@@ -5118,8 +5190,10 @@ def libvlc_vlm_add_vod(p_instance, psz_name, psz_input, i_options, ppsz_options,
     '''
     f = _Cfunctions.get('libvlc_vlm_add_vod', None) or \
         _Cfunction('libvlc_vlm_add_vod', ((1,), (1,), (1,), (1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ListPOINTER(ctypes.c_char_p), ctypes.c_int, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ListPOINTER(ctypes.c_char_p),
+                   ctypes.c_int, ctypes.c_char_p)
     return f(p_instance, psz_name, psz_input, i_options, ppsz_options, b_enabled, psz_mux)
+
 
 def libvlc_vlm_del_media(p_instance, psz_name):
     '''Delete a media (VOD or broadcast).
@@ -5129,8 +5203,9 @@ def libvlc_vlm_del_media(p_instance, psz_name):
     '''
     f = _Cfunctions.get('libvlc_vlm_del_media', None) or \
         _Cfunction('libvlc_vlm_del_media', ((1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p)
     return f(p_instance, psz_name)
+
 
 def libvlc_vlm_set_enabled(p_instance, psz_name, b_enabled):
     '''Enable or disable a media (VOD or broadcast).
@@ -5141,8 +5216,9 @@ def libvlc_vlm_set_enabled(p_instance, psz_name, b_enabled):
     '''
     f = _Cfunctions.get('libvlc_vlm_set_enabled', None) or \
         _Cfunction('libvlc_vlm_set_enabled', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, b_enabled)
+
 
 def libvlc_vlm_set_output(p_instance, psz_name, psz_output):
     '''Set the output for a media.
@@ -5153,8 +5229,9 @@ def libvlc_vlm_set_output(p_instance, psz_name, psz_output):
     '''
     f = _Cfunctions.get('libvlc_vlm_set_output', None) or \
         _Cfunction('libvlc_vlm_set_output', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
     return f(p_instance, psz_name, psz_output)
+
 
 def libvlc_vlm_set_input(p_instance, psz_name, psz_input):
     '''Set a media's input MRL. This will delete all existing inputs and
@@ -5166,8 +5243,9 @@ def libvlc_vlm_set_input(p_instance, psz_name, psz_input):
     '''
     f = _Cfunctions.get('libvlc_vlm_set_input', None) or \
         _Cfunction('libvlc_vlm_set_input', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
     return f(p_instance, psz_name, psz_input)
+
 
 def libvlc_vlm_add_input(p_instance, psz_name, psz_input):
     '''Add a media's input MRL. This will add the specified one.
@@ -5178,8 +5256,9 @@ def libvlc_vlm_add_input(p_instance, psz_name, psz_input):
     '''
     f = _Cfunctions.get('libvlc_vlm_add_input', None) or \
         _Cfunction('libvlc_vlm_add_input', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
     return f(p_instance, psz_name, psz_input)
+
 
 def libvlc_vlm_set_loop(p_instance, psz_name, b_loop):
     '''Set a media's loop status.
@@ -5190,8 +5269,9 @@ def libvlc_vlm_set_loop(p_instance, psz_name, b_loop):
     '''
     f = _Cfunctions.get('libvlc_vlm_set_loop', None) or \
         _Cfunction('libvlc_vlm_set_loop', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, b_loop)
+
 
 def libvlc_vlm_set_mux(p_instance, psz_name, psz_mux):
     '''Set a media's vod muxer.
@@ -5202,8 +5282,9 @@ def libvlc_vlm_set_mux(p_instance, psz_name, psz_mux):
     '''
     f = _Cfunctions.get('libvlc_vlm_set_mux', None) or \
         _Cfunction('libvlc_vlm_set_mux', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p)
     return f(p_instance, psz_name, psz_mux)
+
 
 def libvlc_vlm_change_media(p_instance, psz_name, psz_input, psz_output, i_options, ppsz_options, b_enabled, b_loop):
     '''Edit the parameters of a media. This will delete all existing inputs and
@@ -5220,8 +5301,10 @@ def libvlc_vlm_change_media(p_instance, psz_name, psz_input, psz_output, i_optio
     '''
     f = _Cfunctions.get('libvlc_vlm_change_media', None) or \
         _Cfunction('libvlc_vlm_change_media', ((1,), (1,), (1,), (1,), (1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int, ListPOINTER(ctypes.c_char_p), ctypes.c_int, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
+                   ListPOINTER(ctypes.c_char_p), ctypes.c_int, ctypes.c_int)
     return f(p_instance, psz_name, psz_input, psz_output, i_options, ppsz_options, b_enabled, b_loop)
+
 
 def libvlc_vlm_play_media(p_instance, psz_name):
     '''Play the named broadcast.
@@ -5231,8 +5314,9 @@ def libvlc_vlm_play_media(p_instance, psz_name):
     '''
     f = _Cfunctions.get('libvlc_vlm_play_media', None) or \
         _Cfunction('libvlc_vlm_play_media', ((1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p)
     return f(p_instance, psz_name)
+
 
 def libvlc_vlm_stop_media(p_instance, psz_name):
     '''Stop the named broadcast.
@@ -5242,8 +5326,9 @@ def libvlc_vlm_stop_media(p_instance, psz_name):
     '''
     f = _Cfunctions.get('libvlc_vlm_stop_media', None) or \
         _Cfunction('libvlc_vlm_stop_media', ((1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p)
     return f(p_instance, psz_name)
+
 
 def libvlc_vlm_pause_media(p_instance, psz_name):
     '''Pause the named broadcast.
@@ -5253,8 +5338,9 @@ def libvlc_vlm_pause_media(p_instance, psz_name):
     '''
     f = _Cfunctions.get('libvlc_vlm_pause_media', None) or \
         _Cfunction('libvlc_vlm_pause_media', ((1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p)
     return f(p_instance, psz_name)
+
 
 def libvlc_vlm_seek_media(p_instance, psz_name, f_percentage):
     '''Seek in the named broadcast.
@@ -5265,8 +5351,9 @@ def libvlc_vlm_seek_media(p_instance, psz_name, f_percentage):
     '''
     f = _Cfunctions.get('libvlc_vlm_seek_media', None) or \
         _Cfunction('libvlc_vlm_seek_media', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_float)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_float)
     return f(p_instance, psz_name, f_percentage)
+
 
 def libvlc_vlm_show_media(p_instance, psz_name):
     '''Return information about the named media as a JSON
@@ -5283,8 +5370,9 @@ def libvlc_vlm_show_media(p_instance, psz_name):
     '''
     f = _Cfunctions.get('libvlc_vlm_show_media', None) or \
         _Cfunction('libvlc_vlm_show_media', ((1,), (1,),), string_result,
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_instance, psz_name)
+
 
 def libvlc_vlm_get_media_instance_position(p_instance, psz_name, i_instance):
     '''Get vlm_media instance position by name or instance id.
@@ -5295,8 +5383,9 @@ def libvlc_vlm_get_media_instance_position(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_position', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_position', ((1,), (1,), (1,),), None,
-                    ctypes.c_float, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_float, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_media_instance_time(p_instance, psz_name, i_instance):
     '''Get vlm_media instance time by name or instance id.
@@ -5307,8 +5396,9 @@ def libvlc_vlm_get_media_instance_time(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_time', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_time', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_media_instance_length(p_instance, psz_name, i_instance):
     '''Get vlm_media instance length by name or instance id.
@@ -5319,8 +5409,9 @@ def libvlc_vlm_get_media_instance_length(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_length', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_length', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_media_instance_rate(p_instance, psz_name, i_instance):
     '''Get vlm_media instance playback rate by name or instance id.
@@ -5331,8 +5422,9 @@ def libvlc_vlm_get_media_instance_rate(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_rate', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_rate', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_media_instance_title(p_instance, psz_name, i_instance):
     '''Get vlm_media instance title number by name or instance id.
@@ -5344,8 +5436,9 @@ def libvlc_vlm_get_media_instance_title(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_title', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_title', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_media_instance_chapter(p_instance, psz_name, i_instance):
     '''Get vlm_media instance chapter number by name or instance id.
@@ -5357,8 +5450,9 @@ def libvlc_vlm_get_media_instance_chapter(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_chapter', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_chapter', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_media_instance_seekable(p_instance, psz_name, i_instance):
     '''Is libvlc instance seekable ?
@@ -5370,8 +5464,9 @@ def libvlc_vlm_get_media_instance_seekable(p_instance, psz_name, i_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_media_instance_seekable', None) or \
         _Cfunction('libvlc_vlm_get_media_instance_seekable', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_int, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_name, i_instance)
+
 
 def libvlc_vlm_get_event_manager(p_instance):
     '''Get libvlc_event_manager from a vlm media.
@@ -5381,8 +5476,9 @@ def libvlc_vlm_get_event_manager(p_instance):
     '''
     f = _Cfunctions.get('libvlc_vlm_get_event_manager', None) or \
         _Cfunction('libvlc_vlm_get_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, Instance)
+                   ctypes.c_void_p, Instance)
     return f(p_instance)
+
 
 def libvlc_media_new_location(p_instance, psz_mrl):
     '''Create a media with a certain given media resource location,
@@ -5398,8 +5494,9 @@ def libvlc_media_new_location(p_instance, psz_mrl):
     '''
     f = _Cfunctions.get('libvlc_media_new_location', None) or \
         _Cfunction('libvlc_media_new_location', ((1,), (1,),), class_result(Media),
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_instance, psz_mrl)
+
 
 def libvlc_media_new_path(p_instance, path):
     '''Create a media for a certain file path.
@@ -5410,8 +5507,9 @@ def libvlc_media_new_path(p_instance, path):
     '''
     f = _Cfunctions.get('libvlc_media_new_path', None) or \
         _Cfunction('libvlc_media_new_path', ((1,), (1,),), class_result(Media),
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_instance, path)
+
 
 def libvlc_media_new_fd(p_instance, fd):
     '''Create a media for an already open file descriptor.
@@ -5434,8 +5532,9 @@ def libvlc_media_new_fd(p_instance, fd):
     '''
     f = _Cfunctions.get('libvlc_media_new_fd', None) or \
         _Cfunction('libvlc_media_new_fd', ((1,), (1,),), class_result(Media),
-                    ctypes.c_void_p, Instance, ctypes.c_int)
+                   ctypes.c_void_p, Instance, ctypes.c_int)
     return f(p_instance, fd)
+
 
 def libvlc_media_new_callbacks(instance, open_cb, read_cb, seek_cb, close_cb, opaque):
     '''Create a media with custom callbacks to read the data from.
@@ -5450,8 +5549,9 @@ def libvlc_media_new_callbacks(instance, open_cb, read_cb, seek_cb, close_cb, op
     '''
     f = _Cfunctions.get('libvlc_media_new_callbacks', None) or \
         _Cfunction('libvlc_media_new_callbacks', ((1,), (1,), (1,), (1,), (1,), (1,),), class_result(Media),
-                    ctypes.c_void_p, Instance, MediaOpenCb, MediaReadCb, MediaSeekCb, MediaCloseCb, ctypes.c_void_p)
+                   ctypes.c_void_p, Instance, MediaOpenCb, MediaReadCb, MediaSeekCb, MediaCloseCb, ctypes.c_void_p)
     return f(instance, open_cb, read_cb, seek_cb, close_cb, opaque)
+
 
 def libvlc_media_new_as_node(p_instance, psz_name):
     '''Create a media as an empty node with a given name.
@@ -5462,8 +5562,9 @@ def libvlc_media_new_as_node(p_instance, psz_name):
     '''
     f = _Cfunctions.get('libvlc_media_new_as_node', None) or \
         _Cfunction('libvlc_media_new_as_node', ((1,), (1,),), class_result(Media),
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_instance, psz_name)
+
 
 def libvlc_media_add_option(p_md, psz_options):
     '''Add an option to the media.
@@ -5482,8 +5583,9 @@ def libvlc_media_add_option(p_md, psz_options):
     '''
     f = _Cfunctions.get('libvlc_media_add_option', None) or \
         _Cfunction('libvlc_media_add_option', ((1,), (1,),), None,
-                    None, Media, ctypes.c_char_p)
+                   None, Media, ctypes.c_char_p)
     return f(p_md, psz_options)
+
 
 def libvlc_media_add_option_flag(p_md, psz_options, i_flags):
     '''Add an option to the media with configurable flags.
@@ -5501,8 +5603,9 @@ def libvlc_media_add_option_flag(p_md, psz_options, i_flags):
     '''
     f = _Cfunctions.get('libvlc_media_add_option_flag', None) or \
         _Cfunction('libvlc_media_add_option_flag', ((1,), (1,), (1,),), None,
-                    None, Media, ctypes.c_char_p, ctypes.c_uint)
+                   None, Media, ctypes.c_char_p, ctypes.c_uint)
     return f(p_md, psz_options, i_flags)
+
 
 def libvlc_media_retain(p_md):
     '''Retain a reference to a media descriptor object (L{Media}). Use
@@ -5512,8 +5615,9 @@ def libvlc_media_retain(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_retain', None) or \
         _Cfunction('libvlc_media_retain', ((1,),), None,
-                    None, Media)
+                   None, Media)
     return f(p_md)
+
 
 def libvlc_media_release(p_md):
     '''Decrement the reference count of a media descriptor object. If the
@@ -5525,8 +5629,9 @@ def libvlc_media_release(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_release', None) or \
         _Cfunction('libvlc_media_release', ((1,),), None,
-                    None, Media)
+                   None, Media)
     return f(p_md)
+
 
 def libvlc_media_get_mrl(p_md):
     '''Get the media resource locator (mrl) from a media descriptor object.
@@ -5535,8 +5640,9 @@ def libvlc_media_get_mrl(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_mrl', None) or \
         _Cfunction('libvlc_media_get_mrl', ((1,),), string_result,
-                    ctypes.c_void_p, Media)
+                   ctypes.c_void_p, Media)
     return f(p_md)
+
 
 def libvlc_media_duplicate(p_md):
     '''Duplicate a media descriptor object.
@@ -5544,8 +5650,9 @@ def libvlc_media_duplicate(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_duplicate', None) or \
         _Cfunction('libvlc_media_duplicate', ((1,),), class_result(Media),
-                    ctypes.c_void_p, Media)
+                   ctypes.c_void_p, Media)
     return f(p_md)
+
 
 def libvlc_media_get_meta(p_md, e_meta):
     '''Read the meta of the media.
@@ -5559,8 +5666,9 @@ def libvlc_media_get_meta(p_md, e_meta):
     '''
     f = _Cfunctions.get('libvlc_media_get_meta', None) or \
         _Cfunction('libvlc_media_get_meta', ((1,), (1,),), string_result,
-                    ctypes.c_void_p, Media, Meta)
+                   ctypes.c_void_p, Media, Meta)
     return f(p_md, e_meta)
+
 
 def libvlc_media_set_meta(p_md, e_meta, psz_value):
     '''Set the meta of the media (this function will not save the meta, call
@@ -5571,8 +5679,9 @@ def libvlc_media_set_meta(p_md, e_meta, psz_value):
     '''
     f = _Cfunctions.get('libvlc_media_set_meta', None) or \
         _Cfunction('libvlc_media_set_meta', ((1,), (1,), (1,),), None,
-                    None, Media, Meta, ctypes.c_char_p)
+                   None, Media, Meta, ctypes.c_char_p)
     return f(p_md, e_meta, psz_value)
+
 
 def libvlc_media_save_meta(p_md):
     '''Save the meta previously set.
@@ -5581,8 +5690,9 @@ def libvlc_media_save_meta(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_save_meta', None) or \
         _Cfunction('libvlc_media_save_meta', ((1,),), None,
-                    ctypes.c_int, Media)
+                   ctypes.c_int, Media)
     return f(p_md)
+
 
 def libvlc_media_get_state(p_md):
     '''Get current state of media descriptor object. Possible media states are
@@ -5594,8 +5704,9 @@ def libvlc_media_get_state(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_state', None) or \
         _Cfunction('libvlc_media_get_state', ((1,),), None,
-                    State, Media)
+                   State, Media)
     return f(p_md)
+
 
 def libvlc_media_get_stats(p_md, p_stats):
     '''Get the current statistics about the media.
@@ -5605,8 +5716,9 @@ def libvlc_media_get_stats(p_md, p_stats):
     '''
     f = _Cfunctions.get('libvlc_media_get_stats', None) or \
         _Cfunction('libvlc_media_get_stats', ((1,), (1,),), None,
-                    ctypes.c_int, Media, ctypes.POINTER(MediaStats))
+                   ctypes.c_int, Media, ctypes.POINTER(MediaStats))
     return f(p_md, p_stats)
+
 
 def libvlc_media_subitems(p_md):
     '''Get subitems of media descriptor object. This will increment
@@ -5617,8 +5729,9 @@ def libvlc_media_subitems(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_subitems', None) or \
         _Cfunction('libvlc_media_subitems', ((1,),), class_result(MediaList),
-                    ctypes.c_void_p, Media)
+                   ctypes.c_void_p, Media)
     return f(p_md)
+
 
 def libvlc_media_event_manager(p_md):
     '''Get event manager from media descriptor object.
@@ -5628,8 +5741,9 @@ def libvlc_media_event_manager(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_event_manager', None) or \
         _Cfunction('libvlc_media_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, Media)
+                   ctypes.c_void_p, Media)
     return f(p_md)
+
 
 def libvlc_media_get_duration(p_md):
     '''Get duration (in ms) of media descriptor object item.
@@ -5638,8 +5752,9 @@ def libvlc_media_get_duration(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_duration', None) or \
         _Cfunction('libvlc_media_get_duration', ((1,),), None,
-                    ctypes.c_longlong, Media)
+                   ctypes.c_longlong, Media)
     return f(p_md)
+
 
 def libvlc_media_parse_with_options(p_md, parse_flag, timeout):
     '''Parse the media asynchronously with options.
@@ -5665,8 +5780,9 @@ def libvlc_media_parse_with_options(p_md, parse_flag, timeout):
     '''
     f = _Cfunctions.get('libvlc_media_parse_with_options', None) or \
         _Cfunction('libvlc_media_parse_with_options', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, Media, MediaParseFlag, ctypes.c_int)
+                   ctypes.c_int, Media, MediaParseFlag, ctypes.c_int)
     return f(p_md, parse_flag, timeout)
+
 
 def libvlc_media_parse_stop(p_md):
     '''Stop the parsing of the media
@@ -5678,8 +5794,9 @@ def libvlc_media_parse_stop(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_parse_stop', None) or \
         _Cfunction('libvlc_media_parse_stop', ((1,),), None,
-                    None, Media)
+                   None, Media)
     return f(p_md)
+
 
 def libvlc_media_get_parsed_status(p_md):
     '''Get Parsed status for media descriptor object.
@@ -5691,8 +5808,9 @@ def libvlc_media_get_parsed_status(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_parsed_status', None) or \
         _Cfunction('libvlc_media_get_parsed_status', ((1,),), None,
-                    MediaParsedStatus, Media)
+                   MediaParsedStatus, Media)
     return f(p_md)
+
 
 def libvlc_media_set_user_data(p_md, p_new_user_data):
     '''Sets media descriptor's user_data. user_data is specialized data
@@ -5703,8 +5821,9 @@ def libvlc_media_set_user_data(p_md, p_new_user_data):
     '''
     f = _Cfunctions.get('libvlc_media_set_user_data', None) or \
         _Cfunction('libvlc_media_set_user_data', ((1,), (1,),), None,
-                    None, Media, ctypes.c_void_p)
+                   None, Media, ctypes.c_void_p)
     return f(p_md, p_new_user_data)
+
 
 def libvlc_media_get_user_data(p_md):
     '''Get media descriptor's user_data. user_data is specialized data
@@ -5714,8 +5833,9 @@ def libvlc_media_get_user_data(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_user_data', None) or \
         _Cfunction('libvlc_media_get_user_data', ((1,),), None,
-                    ctypes.c_void_p, Media)
+                   ctypes.c_void_p, Media)
     return f(p_md)
+
 
 def libvlc_media_tracks_get(p_md, tracks):
     '''Get media descriptor's elementary streams description
@@ -5729,8 +5849,9 @@ def libvlc_media_tracks_get(p_md, tracks):
     '''
     f = _Cfunctions.get('libvlc_media_tracks_get', None) or \
         _Cfunction('libvlc_media_tracks_get', ((1,), (1,),), None,
-                    ctypes.c_uint, Media, ctypes.POINTER(ctypes.POINTER(MediaTrack)))
+                   ctypes.c_uint, Media, ctypes.POINTER(ctypes.POINTER(MediaTrack)))
     return f(p_md, tracks)
+
 
 def libvlc_media_get_codec_description(i_type, i_codec):
     '''Get codec description from media elementary stream.
@@ -5741,8 +5862,9 @@ def libvlc_media_get_codec_description(i_type, i_codec):
     '''
     f = _Cfunctions.get('libvlc_media_get_codec_description', None) or \
         _Cfunction('libvlc_media_get_codec_description', ((1,), (1,),), None,
-                    ctypes.c_char_p, TrackType, ctypes.c_uint32)
+                   ctypes.c_char_p, TrackType, ctypes.c_uint32)
     return f(i_type, i_codec)
+
 
 def libvlc_media_tracks_release(p_tracks, i_count):
     '''Release media descriptor's elementary streams description array.
@@ -5752,8 +5874,9 @@ def libvlc_media_tracks_release(p_tracks, i_count):
     '''
     f = _Cfunctions.get('libvlc_media_tracks_release', None) or \
         _Cfunction('libvlc_media_tracks_release', ((1,), (1,),), None,
-                    None, ctypes.POINTER(MediaTrack), ctypes.c_uint)
+                   None, ctypes.POINTER(MediaTrack), ctypes.c_uint)
     return f(p_tracks, i_count)
+
 
 def libvlc_media_get_type(p_md):
     '''Get the media type of the media descriptor object.
@@ -5763,8 +5886,9 @@ def libvlc_media_get_type(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_type', None) or \
         _Cfunction('libvlc_media_get_type', ((1,),), None,
-                    MediaType, Media)
+                   MediaType, Media)
     return f(p_md)
+
 
 def libvlc_media_slaves_add(p_md, i_type, i_priority, psz_uri):
     '''Add a slave to the current media.
@@ -5782,8 +5906,9 @@ def libvlc_media_slaves_add(p_md, i_type, i_priority, psz_uri):
     '''
     f = _Cfunctions.get('libvlc_media_slaves_add', None) or \
         _Cfunction('libvlc_media_slaves_add', ((1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, Media, MediaSlaveType, ctypes.c_int, ctypes.c_char_p)
+                   ctypes.c_int, Media, MediaSlaveType, ctypes.c_int, ctypes.c_char_p)
     return f(p_md, i_type, i_priority, psz_uri)
+
 
 def libvlc_media_slaves_clear(p_md):
     '''Clear all slaves previously added by L{libvlc_media_slaves_add}() or
@@ -5793,8 +5918,9 @@ def libvlc_media_slaves_clear(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_slaves_clear', None) or \
         _Cfunction('libvlc_media_slaves_clear', ((1,),), None,
-                    None, Media)
+                   None, Media)
     return f(p_md)
+
 
 def libvlc_media_slaves_get(p_md, ppp_slaves):
     '''Get a media descriptor's slave list
@@ -5808,8 +5934,9 @@ def libvlc_media_slaves_get(p_md, ppp_slaves):
     '''
     f = _Cfunctions.get('libvlc_media_slaves_get', None) or \
         _Cfunction('libvlc_media_slaves_get', ((1,), (1,),), None,
-                    ctypes.c_int, Media, ctypes.POINTER(ctypes.POINTER(MediaSlave)))
+                   ctypes.c_int, Media, ctypes.POINTER(ctypes.POINTER(MediaSlave)))
     return f(p_md, ppp_slaves)
+
 
 def libvlc_media_slaves_release(pp_slaves, i_count):
     '''Release a media descriptor's slave list.
@@ -5819,8 +5946,9 @@ def libvlc_media_slaves_release(pp_slaves, i_count):
     '''
     f = _Cfunctions.get('libvlc_media_slaves_release', None) or \
         _Cfunction('libvlc_media_slaves_release', ((1,), (1,),), None,
-                    None, ctypes.POINTER(MediaSlave), ctypes.c_int)
+                   None, ctypes.POINTER(MediaSlave), ctypes.c_int)
     return f(pp_slaves, i_count)
+
 
 def libvlc_renderer_item_hold(p_item):
     '''Hold a renderer item, i.e. creates a new reference
@@ -5832,8 +5960,9 @@ def libvlc_renderer_item_hold(p_item):
     '''
     f = _Cfunctions.get('libvlc_renderer_item_hold', None) or \
         _Cfunction('libvlc_renderer_item_hold', ((1,),), class_result(Renderer),
-                    ctypes.c_void_p, Renderer)
+                   ctypes.c_void_p, Renderer)
     return f(p_item)
+
 
 def libvlc_renderer_item_release(p_item):
     '''Releases a renderer item, i.e. decrements its reference counter.
@@ -5841,8 +5970,9 @@ def libvlc_renderer_item_release(p_item):
     '''
     f = _Cfunctions.get('libvlc_renderer_item_release', None) or \
         _Cfunction('libvlc_renderer_item_release', ((1,),), None,
-                    None, Renderer)
+                   None, Renderer)
     return f(p_item)
+
 
 def libvlc_renderer_item_name(p_item):
     '''Get the human readable name of a renderer item.
@@ -5851,8 +5981,9 @@ def libvlc_renderer_item_name(p_item):
     '''
     f = _Cfunctions.get('libvlc_renderer_item_name', None) or \
         _Cfunction('libvlc_renderer_item_name', ((1,),), None,
-                    ctypes.c_char_p, Renderer)
+                   ctypes.c_char_p, Renderer)
     return f(p_item)
+
 
 def libvlc_renderer_item_type(p_item):
     '''Get the type (not translated) of a renderer item. For now, the type can only
@@ -5862,8 +5993,9 @@ def libvlc_renderer_item_type(p_item):
     '''
     f = _Cfunctions.get('libvlc_renderer_item_type', None) or \
         _Cfunction('libvlc_renderer_item_type', ((1,),), None,
-                    ctypes.c_char_p, Renderer)
+                   ctypes.c_char_p, Renderer)
     return f(p_item)
+
 
 def libvlc_renderer_item_icon_uri(p_item):
     '''Get the icon uri of a renderer item.
@@ -5872,8 +6004,9 @@ def libvlc_renderer_item_icon_uri(p_item):
     '''
     f = _Cfunctions.get('libvlc_renderer_item_icon_uri', None) or \
         _Cfunction('libvlc_renderer_item_icon_uri', ((1,),), None,
-                    ctypes.c_char_p, Renderer)
+                   ctypes.c_char_p, Renderer)
     return f(p_item)
+
 
 def libvlc_renderer_item_flags(p_item):
     '''Get the flags of a renderer item
@@ -5884,8 +6017,9 @@ def libvlc_renderer_item_flags(p_item):
     '''
     f = _Cfunctions.get('libvlc_renderer_item_flags', None) or \
         _Cfunction('libvlc_renderer_item_flags', ((1,),), None,
-                    ctypes.c_int, Renderer)
+                   ctypes.c_int, Renderer)
     return f(p_item)
+
 
 def libvlc_renderer_discoverer_new(p_inst, psz_name):
     '''Create a renderer discoverer object by name
@@ -5902,8 +6036,9 @@ def libvlc_renderer_discoverer_new(p_inst, psz_name):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_new', None) or \
         _Cfunction('libvlc_renderer_discoverer_new', ((1,), (1,),), class_result(RendererDiscoverer),
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_inst, psz_name)
+
 
 def libvlc_renderer_discoverer_release(p_rd):
     '''Release a renderer discoverer object.
@@ -5912,8 +6047,9 @@ def libvlc_renderer_discoverer_release(p_rd):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_release', None) or \
         _Cfunction('libvlc_renderer_discoverer_release', ((1,),), None,
-                    None, RendererDiscoverer)
+                   None, RendererDiscoverer)
     return f(p_rd)
+
 
 def libvlc_renderer_discoverer_start(p_rd):
     '''Start renderer discovery
@@ -5926,8 +6062,9 @@ def libvlc_renderer_discoverer_start(p_rd):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_start', None) or \
         _Cfunction('libvlc_renderer_discoverer_start', ((1,),), None,
-                    ctypes.c_int, RendererDiscoverer)
+                   ctypes.c_int, RendererDiscoverer)
     return f(p_rd)
+
 
 def libvlc_renderer_discoverer_stop(p_rd):
     '''Stop renderer discovery.
@@ -5937,8 +6074,9 @@ def libvlc_renderer_discoverer_stop(p_rd):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_stop', None) or \
         _Cfunction('libvlc_renderer_discoverer_stop', ((1,),), None,
-                    None, RendererDiscoverer)
+                   None, RendererDiscoverer)
     return f(p_rd)
+
 
 def libvlc_renderer_discoverer_event_manager(p_rd):
     '''Get the event manager of the renderer discoverer
@@ -5954,8 +6092,9 @@ def libvlc_renderer_discoverer_event_manager(p_rd):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_event_manager', None) or \
         _Cfunction('libvlc_renderer_discoverer_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, RendererDiscoverer)
+                   ctypes.c_void_p, RendererDiscoverer)
     return f(p_rd)
+
 
 def libvlc_renderer_discoverer_list_get(p_inst, ppp_services):
     '''Get media discoverer services
@@ -5967,8 +6106,9 @@ def libvlc_renderer_discoverer_list_get(p_inst, ppp_services):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_list_get', None) or \
         _Cfunction('libvlc_renderer_discoverer_list_get', ((1,), (1,),), None,
-                    ctypes.c_size_t, Instance, ctypes.POINTER(ctypes.POINTER(RDDescription)))
+                   ctypes.c_size_t, Instance, ctypes.POINTER(ctypes.POINTER(RDDescription)))
     return f(p_inst, ppp_services)
+
 
 def libvlc_renderer_discoverer_list_release(pp_services, i_count):
     '''Release an array of media discoverer services
@@ -5979,8 +6119,9 @@ def libvlc_renderer_discoverer_list_release(pp_services, i_count):
     '''
     f = _Cfunctions.get('libvlc_renderer_discoverer_list_release', None) or \
         _Cfunction('libvlc_renderer_discoverer_list_release', ((1,), (1,),), None,
-                    None, ctypes.POINTER(RDDescription), ctypes.c_size_t)
+                   None, ctypes.POINTER(RDDescription), ctypes.c_size_t)
     return f(pp_services, i_count)
+
 
 def libvlc_media_list_new(p_instance):
     '''Create an empty media list.
@@ -5989,8 +6130,9 @@ def libvlc_media_list_new(p_instance):
     '''
     f = _Cfunctions.get('libvlc_media_list_new', None) or \
         _Cfunction('libvlc_media_list_new', ((1,),), class_result(MediaList),
-                    ctypes.c_void_p, Instance)
+                   ctypes.c_void_p, Instance)
     return f(p_instance)
+
 
 def libvlc_media_list_release(p_ml):
     '''Release media list created with L{libvlc_media_list_new}().
@@ -5998,8 +6140,9 @@ def libvlc_media_list_release(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_release', None) or \
         _Cfunction('libvlc_media_list_release', ((1,),), None,
-                    None, MediaList)
+                   None, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_retain(p_ml):
     '''Retain reference to a media list.
@@ -6007,8 +6150,9 @@ def libvlc_media_list_retain(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_retain', None) or \
         _Cfunction('libvlc_media_list_retain', ((1,),), None,
-                    None, MediaList)
+                   None, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_set_media(p_ml, p_md):
     '''Associate media instance with this media list instance.
@@ -6019,8 +6163,9 @@ def libvlc_media_list_set_media(p_ml, p_md):
     '''
     f = _Cfunctions.get('libvlc_media_list_set_media', None) or \
         _Cfunction('libvlc_media_list_set_media', ((1,), (1,),), None,
-                    None, MediaList, Media)
+                   None, MediaList, Media)
     return f(p_ml, p_md)
+
 
 def libvlc_media_list_media(p_ml):
     '''Get media instance from this media list instance. This action will increase
@@ -6031,8 +6176,9 @@ def libvlc_media_list_media(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_media', None) or \
         _Cfunction('libvlc_media_list_media', ((1,),), class_result(Media),
-                    ctypes.c_void_p, MediaList)
+                   ctypes.c_void_p, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_add_media(p_ml, p_md):
     '''Add media instance to media list
@@ -6043,8 +6189,9 @@ def libvlc_media_list_add_media(p_ml, p_md):
     '''
     f = _Cfunctions.get('libvlc_media_list_add_media', None) or \
         _Cfunction('libvlc_media_list_add_media', ((1,), (1,),), None,
-                    ctypes.c_int, MediaList, Media)
+                   ctypes.c_int, MediaList, Media)
     return f(p_ml, p_md)
+
 
 def libvlc_media_list_insert_media(p_ml, p_md, i_pos):
     '''Insert media instance in media list on a position
@@ -6056,8 +6203,9 @@ def libvlc_media_list_insert_media(p_ml, p_md, i_pos):
     '''
     f = _Cfunctions.get('libvlc_media_list_insert_media', None) or \
         _Cfunction('libvlc_media_list_insert_media', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, MediaList, Media, ctypes.c_int)
+                   ctypes.c_int, MediaList, Media, ctypes.c_int)
     return f(p_ml, p_md, i_pos)
+
 
 def libvlc_media_list_remove_index(p_ml, i_pos):
     '''Remove media instance from media list on a position
@@ -6068,8 +6216,9 @@ def libvlc_media_list_remove_index(p_ml, i_pos):
     '''
     f = _Cfunctions.get('libvlc_media_list_remove_index', None) or \
         _Cfunction('libvlc_media_list_remove_index', ((1,), (1,),), None,
-                    ctypes.c_int, MediaList, ctypes.c_int)
+                   ctypes.c_int, MediaList, ctypes.c_int)
     return f(p_ml, i_pos)
+
 
 def libvlc_media_list_count(p_ml):
     '''Get count on media list items
@@ -6079,8 +6228,9 @@ def libvlc_media_list_count(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_count', None) or \
         _Cfunction('libvlc_media_list_count', ((1,),), None,
-                    ctypes.c_int, MediaList)
+                   ctypes.c_int, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_item_at_index(p_ml, i_pos):
     '''List media instance in media list at a position
@@ -6091,8 +6241,9 @@ def libvlc_media_list_item_at_index(p_ml, i_pos):
     '''
     f = _Cfunctions.get('libvlc_media_list_item_at_index', None) or \
         _Cfunction('libvlc_media_list_item_at_index', ((1,), (1,),), class_result(Media),
-                    ctypes.c_void_p, MediaList, ctypes.c_int)
+                   ctypes.c_void_p, MediaList, ctypes.c_int)
     return f(p_ml, i_pos)
+
 
 def libvlc_media_list_index_of_item(p_ml, p_md):
     '''Find index position of List media instance in media list.
@@ -6104,8 +6255,9 @@ def libvlc_media_list_index_of_item(p_ml, p_md):
     '''
     f = _Cfunctions.get('libvlc_media_list_index_of_item', None) or \
         _Cfunction('libvlc_media_list_index_of_item', ((1,), (1,),), None,
-                    ctypes.c_int, MediaList, Media)
+                   ctypes.c_int, MediaList, Media)
     return f(p_ml, p_md)
+
 
 def libvlc_media_list_is_readonly(p_ml):
     '''This indicates if this media list is read-only from a user point of view.
@@ -6114,8 +6266,9 @@ def libvlc_media_list_is_readonly(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_is_readonly', None) or \
         _Cfunction('libvlc_media_list_is_readonly', ((1,),), None,
-                    ctypes.c_int, MediaList)
+                   ctypes.c_int, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_lock(p_ml):
     '''Get lock on media list items.
@@ -6123,8 +6276,9 @@ def libvlc_media_list_lock(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_lock', None) or \
         _Cfunction('libvlc_media_list_lock', ((1,),), None,
-                    None, MediaList)
+                   None, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_unlock(p_ml):
     '''Release lock on media list items
@@ -6133,8 +6287,9 @@ def libvlc_media_list_unlock(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_unlock', None) or \
         _Cfunction('libvlc_media_list_unlock', ((1,),), None,
-                    None, MediaList)
+                   None, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_list_event_manager(p_ml):
     '''Get libvlc_event_manager from this media list instance.
@@ -6144,8 +6299,9 @@ def libvlc_media_list_event_manager(p_ml):
     '''
     f = _Cfunctions.get('libvlc_media_list_event_manager', None) or \
         _Cfunction('libvlc_media_list_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, MediaList)
+                   ctypes.c_void_p, MediaList)
     return f(p_ml)
+
 
 def libvlc_media_player_get_fps(p_mi):
     '''Get movie fps rate
@@ -6158,32 +6314,36 @@ def libvlc_media_player_get_fps(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_fps', None) or \
         _Cfunction('libvlc_media_player_get_fps', ((1,),), None,
-                    ctypes.c_float, MediaPlayer)
+                   ctypes.c_float, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_agl(p_mi, drawable):
     '''\deprecated Use L{libvlc_media_player_set_nsobject}() instead.
     '''
     f = _Cfunctions.get('libvlc_media_player_set_agl', None) or \
         _Cfunction('libvlc_media_player_set_agl', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint32)
+                   None, MediaPlayer, ctypes.c_uint32)
     return f(p_mi, drawable)
+
 
 def libvlc_media_player_get_agl(p_mi):
     '''\deprecated Use L{libvlc_media_player_get_nsobject}() instead.
     '''
     f = _Cfunctions.get('libvlc_media_player_get_agl', None) or \
         _Cfunction('libvlc_media_player_get_agl', ((1,),), None,
-                    ctypes.c_uint32, MediaPlayer)
+                   ctypes.c_uint32, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_track_description_release(p_track_description):
     '''\deprecated Use L{libvlc_track_description_list_release}() instead.
     '''
     f = _Cfunctions.get('libvlc_track_description_release', None) or \
         _Cfunction('libvlc_track_description_release', ((1,),), None,
-                    None, ctypes.POINTER(TrackDescription))
+                   None, ctypes.POINTER(TrackDescription))
     return f(p_track_description)
+
 
 def libvlc_video_get_height(p_mi):
     '''Get current video height.
@@ -6193,8 +6353,9 @@ def libvlc_video_get_height(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_height', None) or \
         _Cfunction('libvlc_video_get_height', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_width(p_mi):
     '''Get current video width.
@@ -6204,8 +6365,9 @@ def libvlc_video_get_width(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_width', None) or \
         _Cfunction('libvlc_video_get_width', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_title_description(p_mi):
     '''Get the description of available titles.
@@ -6214,8 +6376,9 @@ def libvlc_video_get_title_description(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_title_description', None) or \
         _Cfunction('libvlc_video_get_title_description', ((1,),), None,
-                    ctypes.POINTER(TrackDescription), MediaPlayer)
+                   ctypes.POINTER(TrackDescription), MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_chapter_description(p_mi, i_title):
     '''Get the description of available chapters for specific title.
@@ -6225,8 +6388,9 @@ def libvlc_video_get_chapter_description(p_mi, i_title):
     '''
     f = _Cfunctions.get('libvlc_video_get_chapter_description', None) or \
         _Cfunction('libvlc_video_get_chapter_description', ((1,), (1,),), None,
-                    ctypes.POINTER(TrackDescription), MediaPlayer, ctypes.c_int)
+                   ctypes.POINTER(TrackDescription), MediaPlayer, ctypes.c_int)
     return f(p_mi, i_title)
+
 
 def libvlc_video_set_subtitle_file(p_mi, psz_subtitle):
     '''Set new video subtitle file.
@@ -6237,8 +6401,9 @@ def libvlc_video_set_subtitle_file(p_mi, psz_subtitle):
     '''
     f = _Cfunctions.get('libvlc_video_set_subtitle_file', None) or \
         _Cfunction('libvlc_video_set_subtitle_file', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_char_p)
+                   ctypes.c_int, MediaPlayer, ctypes.c_char_p)
     return f(p_mi, psz_subtitle)
+
 
 def libvlc_toggle_teletext(p_mi):
     '''Toggle teletext transparent status on video output.
@@ -6247,8 +6412,9 @@ def libvlc_toggle_teletext(p_mi):
     '''
     f = _Cfunctions.get('libvlc_toggle_teletext', None) or \
         _Cfunction('libvlc_toggle_teletext', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_output_device_count(p_instance, psz_audio_output):
     '''Backward compatibility stub. Do not use in new code.
@@ -6257,8 +6423,9 @@ def libvlc_audio_output_device_count(p_instance, psz_audio_output):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_count', None) or \
         _Cfunction('libvlc_audio_output_device_count', ((1,), (1,),), None,
-                    ctypes.c_int, Instance, ctypes.c_char_p)
+                   ctypes.c_int, Instance, ctypes.c_char_p)
     return f(p_instance, psz_audio_output)
+
 
 def libvlc_audio_output_device_longname(p_instance, psz_output, i_device):
     '''Backward compatibility stub. Do not use in new code.
@@ -6267,8 +6434,9 @@ def libvlc_audio_output_device_longname(p_instance, psz_output, i_device):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_longname', None) or \
         _Cfunction('libvlc_audio_output_device_longname', ((1,), (1,), (1,),), string_result,
-                    ctypes.c_void_p, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_output, i_device)
+
 
 def libvlc_audio_output_device_id(p_instance, psz_audio_output, i_device):
     '''Backward compatibility stub. Do not use in new code.
@@ -6277,8 +6445,9 @@ def libvlc_audio_output_device_id(p_instance, psz_audio_output, i_device):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_id', None) or \
         _Cfunction('libvlc_audio_output_device_id', ((1,), (1,), (1,),), string_result,
-                    ctypes.c_void_p, Instance, ctypes.c_char_p, ctypes.c_int)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p, ctypes.c_int)
     return f(p_instance, psz_audio_output, i_device)
+
 
 def libvlc_media_parse(p_md):
     '''Parse a media.
@@ -6293,8 +6462,9 @@ def libvlc_media_parse(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_parse', None) or \
         _Cfunction('libvlc_media_parse', ((1,),), None,
-                    None, Media)
+                   None, Media)
     return f(p_md)
+
 
 def libvlc_media_parse_async(p_md):
     '''Parse a media.
@@ -6314,8 +6484,9 @@ def libvlc_media_parse_async(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_parse_async', None) or \
         _Cfunction('libvlc_media_parse_async', ((1,),), None,
-                    None, Media)
+                   None, Media)
     return f(p_md)
+
 
 def libvlc_media_is_parsed(p_md):
     '''Return true is the media descriptor object is parsed
@@ -6327,8 +6498,9 @@ def libvlc_media_is_parsed(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_is_parsed', None) or \
         _Cfunction('libvlc_media_is_parsed', ((1,),), None,
-                    ctypes.c_int, Media)
+                   ctypes.c_int, Media)
     return f(p_md)
+
 
 def libvlc_media_get_tracks_info(p_md):
     '''Get media descriptor's elementary streams description
@@ -6342,16 +6514,18 @@ def libvlc_media_get_tracks_info(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_get_tracks_info', None) or \
         _Cfunction('libvlc_media_get_tracks_info', ((1,), (2,),), None,
-                    ctypes.c_int, Media, ctypes.POINTER(ctypes.c_void_p))
+                   ctypes.c_int, Media, ctypes.POINTER(ctypes.c_void_p))
     return f(p_md)
+
 
 def libvlc_media_discoverer_new_from_name(p_inst, psz_name):
     '''\deprecated Use L{libvlc_media_discoverer_new}() and L{libvlc_media_discoverer_start}().
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_new_from_name', None) or \
         _Cfunction('libvlc_media_discoverer_new_from_name', ((1,), (1,),), class_result(MediaDiscoverer),
-                    ctypes.c_void_p, Instance, ctypes.c_char_p)
+                   ctypes.c_void_p, Instance, ctypes.c_char_p)
     return f(p_inst, psz_name)
+
 
 def libvlc_media_discoverer_localized_name(p_mdis):
     '''Get media service discover object its localized name.
@@ -6362,8 +6536,9 @@ def libvlc_media_discoverer_localized_name(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_localized_name', None) or \
         _Cfunction('libvlc_media_discoverer_localized_name', ((1,),), string_result,
-                    ctypes.c_void_p, MediaDiscoverer)
+                   ctypes.c_void_p, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_media_discoverer_event_manager(p_mdis):
     '''Get event manager from media service discover object.
@@ -6374,8 +6549,9 @@ def libvlc_media_discoverer_event_manager(p_mdis):
     '''
     f = _Cfunctions.get('libvlc_media_discoverer_event_manager', None) or \
         _Cfunction('libvlc_media_discoverer_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, MediaDiscoverer)
+                   ctypes.c_void_p, MediaDiscoverer)
     return f(p_mdis)
+
 
 def libvlc_wait(p_instance):
     '''Waits until an interface causes the instance to exit.
@@ -6384,8 +6560,9 @@ def libvlc_wait(p_instance):
     '''
     f = _Cfunctions.get('libvlc_wait', None) or \
         _Cfunction('libvlc_wait', ((1,),), None,
-                    None, Instance)
+                   None, Instance)
     return f(p_instance)
+
 
 def libvlc_get_log_verbosity(p_instance):
     '''Always returns minus one.
@@ -6395,8 +6572,9 @@ def libvlc_get_log_verbosity(p_instance):
     '''
     f = _Cfunctions.get('libvlc_get_log_verbosity', None) or \
         _Cfunction('libvlc_get_log_verbosity', ((1,),), None,
-                    ctypes.c_uint, Instance)
+                   ctypes.c_uint, Instance)
     return f(p_instance)
+
 
 def libvlc_set_log_verbosity(p_instance, level):
     '''This function does nothing.
@@ -6406,8 +6584,9 @@ def libvlc_set_log_verbosity(p_instance, level):
     '''
     f = _Cfunctions.get('libvlc_set_log_verbosity', None) or \
         _Cfunction('libvlc_set_log_verbosity', ((1,), (1,),), None,
-                    None, Instance, ctypes.c_uint)
+                   None, Instance, ctypes.c_uint)
     return f(p_instance, level)
+
 
 def libvlc_log_open(p_instance):
     '''This function does nothing useful.
@@ -6417,8 +6596,9 @@ def libvlc_log_open(p_instance):
     '''
     f = _Cfunctions.get('libvlc_log_open', None) or \
         _Cfunction('libvlc_log_open', ((1,),), None,
-                    Log_ptr, Instance)
+                   Log_ptr, Instance)
     return f(p_instance)
+
 
 def libvlc_log_close(p_log):
     '''Frees memory allocated by L{libvlc_log_open}().
@@ -6426,8 +6606,9 @@ def libvlc_log_close(p_log):
     '''
     f = _Cfunctions.get('libvlc_log_close', None) or \
         _Cfunction('libvlc_log_close', ((1,),), None,
-                    None, Log_ptr)
+                   None, Log_ptr)
     return f(p_log)
+
 
 def libvlc_log_count(p_log):
     '''Always returns zero.
@@ -6437,8 +6618,9 @@ def libvlc_log_count(p_log):
     '''
     f = _Cfunctions.get('libvlc_log_count', None) or \
         _Cfunction('libvlc_log_count', ((1,),), None,
-                    ctypes.c_uint, Log_ptr)
+                   ctypes.c_uint, Log_ptr)
     return f(p_log)
+
 
 def libvlc_log_clear(p_log):
     '''This function does nothing.
@@ -6447,8 +6629,9 @@ def libvlc_log_clear(p_log):
     '''
     f = _Cfunctions.get('libvlc_log_clear', None) or \
         _Cfunction('libvlc_log_clear', ((1,),), None,
-                    None, Log_ptr)
+                   None, Log_ptr)
     return f(p_log)
+
 
 def libvlc_log_get_iterator(p_log):
     '''This function does nothing useful.
@@ -6458,8 +6641,9 @@ def libvlc_log_get_iterator(p_log):
     '''
     f = _Cfunctions.get('libvlc_log_get_iterator', None) or \
         _Cfunction('libvlc_log_get_iterator', ((1,),), class_result(LogIterator),
-                    ctypes.c_void_p, Log_ptr)
+                   ctypes.c_void_p, Log_ptr)
     return f(p_log)
+
 
 def libvlc_log_iterator_free(p_iter):
     '''Frees memory allocated by L{libvlc_log_get_iterator}().
@@ -6467,8 +6651,9 @@ def libvlc_log_iterator_free(p_iter):
     '''
     f = _Cfunctions.get('libvlc_log_iterator_free', None) or \
         _Cfunction('libvlc_log_iterator_free', ((1,),), None,
-                    None, LogIterator)
+                   None, LogIterator)
     return f(p_iter)
+
 
 def libvlc_log_iterator_has_next(p_iter):
     '''Always returns zero.
@@ -6478,8 +6663,9 @@ def libvlc_log_iterator_has_next(p_iter):
     '''
     f = _Cfunctions.get('libvlc_log_iterator_has_next', None) or \
         _Cfunction('libvlc_log_iterator_has_next', ((1,),), None,
-                    ctypes.c_int, LogIterator)
+                   ctypes.c_int, LogIterator)
     return f(p_iter)
+
 
 def libvlc_log_iterator_next(p_iter, p_buf):
     '''Always returns None.
@@ -6490,8 +6676,9 @@ def libvlc_log_iterator_next(p_iter, p_buf):
     '''
     f = _Cfunctions.get('libvlc_log_iterator_next', None) or \
         _Cfunction('libvlc_log_iterator_next', ((1,), (1,),), None,
-                    ctypes.POINTER(LogMessage), LogIterator, ctypes.POINTER(LogMessage))
+                   ctypes.POINTER(LogMessage), LogIterator, ctypes.POINTER(LogMessage))
     return f(p_iter, p_buf)
+
 
 def libvlc_playlist_play(p_instance, i_id, i_options, ppsz_options):
     '''Start playing (if there is any item in the playlist).
@@ -6504,8 +6691,9 @@ def libvlc_playlist_play(p_instance, i_id, i_options, ppsz_options):
     '''
     f = _Cfunctions.get('libvlc_playlist_play', None) or \
         _Cfunction('libvlc_playlist_play', ((1,), (1,), (1,), (1,),), None,
-                    None, Instance, ctypes.c_int, ctypes.c_int, ListPOINTER(ctypes.c_char_p))
+                   None, Instance, ctypes.c_int, ctypes.c_int, ListPOINTER(ctypes.c_char_p))
     return f(p_instance, i_id, i_options, ppsz_options)
+
 
 def libvlc_media_player_new(p_libvlc_instance):
     '''Create an empty Media Player object.
@@ -6514,8 +6702,9 @@ def libvlc_media_player_new(p_libvlc_instance):
     '''
     f = _Cfunctions.get('libvlc_media_player_new', None) or \
         _Cfunction('libvlc_media_player_new', ((1,),), class_result(MediaPlayer),
-                    ctypes.c_void_p, Instance)
+                   ctypes.c_void_p, Instance)
     return f(p_libvlc_instance)
+
 
 def libvlc_media_player_new_from_media(p_md):
     '''Create a Media Player object from a Media.
@@ -6524,8 +6713,9 @@ def libvlc_media_player_new_from_media(p_md):
     '''
     f = _Cfunctions.get('libvlc_media_player_new_from_media', None) or \
         _Cfunction('libvlc_media_player_new_from_media', ((1,),), class_result(MediaPlayer),
-                    ctypes.c_void_p, Media)
+                   ctypes.c_void_p, Media)
     return f(p_md)
+
 
 def libvlc_media_player_release(p_mi):
     '''Release a media_player after use
@@ -6537,8 +6727,9 @@ def libvlc_media_player_release(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_release', None) or \
         _Cfunction('libvlc_media_player_release', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_retain(p_mi):
     '''Retain a reference to a media player object. Use
@@ -6547,8 +6738,9 @@ def libvlc_media_player_retain(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_retain', None) or \
         _Cfunction('libvlc_media_player_retain', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_media(p_mi, p_md):
     '''Set the media that will be used by the media_player. If any,
@@ -6558,8 +6750,9 @@ def libvlc_media_player_set_media(p_mi, p_md):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_media', None) or \
         _Cfunction('libvlc_media_player_set_media', ((1,), (1,),), None,
-                    None, MediaPlayer, Media)
+                   None, MediaPlayer, Media)
     return f(p_mi, p_md)
+
 
 def libvlc_media_player_get_media(p_mi):
     '''Get the media used by the media_player.
@@ -6568,8 +6761,9 @@ def libvlc_media_player_get_media(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_media', None) or \
         _Cfunction('libvlc_media_player_get_media', ((1,),), class_result(Media),
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_event_manager(p_mi):
     '''Get the Event Manager from which the media player send event.
@@ -6578,8 +6772,9 @@ def libvlc_media_player_event_manager(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_event_manager', None) or \
         _Cfunction('libvlc_media_player_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_is_playing(p_mi):
     '''is_playing.
@@ -6588,8 +6783,9 @@ def libvlc_media_player_is_playing(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_is_playing', None) or \
         _Cfunction('libvlc_media_player_is_playing', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_play(p_mi):
     '''Play.
@@ -6598,8 +6794,9 @@ def libvlc_media_player_play(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_play', None) or \
         _Cfunction('libvlc_media_player_play', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_pause(mp, do_pause):
     '''Pause or resume (no effect if there is no media).
@@ -6609,8 +6806,9 @@ def libvlc_media_player_set_pause(mp, do_pause):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_pause', None) or \
         _Cfunction('libvlc_media_player_set_pause', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_int)
     return f(mp, do_pause)
+
 
 def libvlc_media_player_pause(p_mi):
     '''Toggle pause (no effect if there is no media).
@@ -6618,8 +6816,9 @@ def libvlc_media_player_pause(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_pause', None) or \
         _Cfunction('libvlc_media_player_pause', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_stop(p_mi):
     '''Stop (no effect if there is no media).
@@ -6627,8 +6826,9 @@ def libvlc_media_player_stop(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_stop', None) or \
         _Cfunction('libvlc_media_player_stop', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_renderer(p_mi, p_item):
     '''Set a renderer to the media player
@@ -6642,8 +6842,9 @@ def libvlc_media_player_set_renderer(p_mi, p_item):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_renderer', None) or \
         _Cfunction('libvlc_media_player_set_renderer', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, Renderer)
+                   ctypes.c_int, MediaPlayer, Renderer)
     return f(p_mi, p_item)
+
 
 def libvlc_video_set_callbacks(mp, lock, unlock, display, opaque):
     '''Set callbacks and private data to render decoded video to a custom area
@@ -6679,8 +6880,9 @@ def libvlc_video_set_callbacks(mp, lock, unlock, display, opaque):
     '''
     f = _Cfunctions.get('libvlc_video_set_callbacks', None) or \
         _Cfunction('libvlc_video_set_callbacks', ((1,), (1,), (1,), (1,), (1,),), None,
-                    None, MediaPlayer, VideoLockCb, VideoUnlockCb, VideoDisplayCb, ctypes.c_void_p)
+                   None, MediaPlayer, VideoLockCb, VideoUnlockCb, VideoDisplayCb, ctypes.c_void_p)
     return f(mp, lock, unlock, display, opaque)
+
 
 def libvlc_video_set_format(mp, chroma, width, height, pitch):
     '''Set decoded video chroma and dimensions.
@@ -6696,8 +6898,9 @@ def libvlc_video_set_format(mp, chroma, width, height, pitch):
     '''
     f = _Cfunctions.get('libvlc_video_set_format', None) or \
         _Cfunction('libvlc_video_set_format', ((1,), (1,), (1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_char_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint)
+                   None, MediaPlayer, ctypes.c_char_p, ctypes.c_uint, ctypes.c_uint, ctypes.c_uint)
     return f(mp, chroma, width, height, pitch)
+
 
 def libvlc_video_set_format_callbacks(mp, setup, cleanup):
     '''Set decoded video chroma and dimensions. This only works in combination with
@@ -6709,8 +6912,9 @@ def libvlc_video_set_format_callbacks(mp, setup, cleanup):
     '''
     f = _Cfunctions.get('libvlc_video_set_format_callbacks', None) or \
         _Cfunction('libvlc_video_set_format_callbacks', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, VideoFormatCb, VideoCleanupCb)
+                   None, MediaPlayer, VideoFormatCb, VideoCleanupCb)
     return f(mp, setup, cleanup)
+
 
 def libvlc_media_player_set_nsobject(p_mi, drawable):
     '''Set the NSView handler where the media player should render its video output.
@@ -6740,8 +6944,9 @@ def libvlc_media_player_set_nsobject(p_mi, drawable):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_nsobject', None) or \
         _Cfunction('libvlc_media_player_set_nsobject', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_void_p)
+                   None, MediaPlayer, ctypes.c_void_p)
     return f(p_mi, drawable)
+
 
 def libvlc_media_player_get_nsobject(p_mi):
     '''Get the NSView handler previously set with L{libvlc_media_player_set_nsobject}().
@@ -6750,8 +6955,9 @@ def libvlc_media_player_get_nsobject(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_nsobject', None) or \
         _Cfunction('libvlc_media_player_get_nsobject', ((1,),), None,
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_xwindow(p_mi, drawable):
     '''Set an X Window System drawable where the media player should render its
@@ -6776,8 +6982,9 @@ def libvlc_media_player_set_xwindow(p_mi, drawable):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_xwindow', None) or \
         _Cfunction('libvlc_media_player_set_xwindow', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint32)
+                   None, MediaPlayer, ctypes.c_uint32)
     return f(p_mi, drawable)
+
 
 def libvlc_media_player_get_xwindow(p_mi):
     '''Get the X Window System window identifier previously set with
@@ -6789,8 +6996,9 @@ def libvlc_media_player_get_xwindow(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_xwindow', None) or \
         _Cfunction('libvlc_media_player_get_xwindow', ((1,),), None,
-                    ctypes.c_uint32, MediaPlayer)
+                   ctypes.c_uint32, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_hwnd(p_mi, drawable):
     '''Set a Win32/Win64 API window handle (HWND) where the media player should
@@ -6801,8 +7009,9 @@ def libvlc_media_player_set_hwnd(p_mi, drawable):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_hwnd', None) or \
         _Cfunction('libvlc_media_player_set_hwnd', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_void_p)
+                   None, MediaPlayer, ctypes.c_void_p)
     return f(p_mi, drawable)
+
 
 def libvlc_media_player_get_hwnd(p_mi):
     '''Get the Windows API window handle (HWND) previously set with
@@ -6813,8 +7022,9 @@ def libvlc_media_player_get_hwnd(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_hwnd', None) or \
         _Cfunction('libvlc_media_player_get_hwnd', ((1,),), None,
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_android_context(p_mi, p_awindow_handler):
     '''Set the android context.
@@ -6824,8 +7034,9 @@ def libvlc_media_player_set_android_context(p_mi, p_awindow_handler):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_android_context', None) or \
         _Cfunction('libvlc_media_player_set_android_context', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_void_p)
+                   None, MediaPlayer, ctypes.c_void_p)
     return f(p_mi, p_awindow_handler)
+
 
 def libvlc_media_player_set_evas_object(p_mi, p_evas_object):
     '''Set the EFL Evas Object.
@@ -6836,8 +7047,9 @@ def libvlc_media_player_set_evas_object(p_mi, p_evas_object):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_evas_object', None) or \
         _Cfunction('libvlc_media_player_set_evas_object', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_void_p)
+                   ctypes.c_int, MediaPlayer, ctypes.c_void_p)
     return f(p_mi, p_evas_object)
+
 
 def libvlc_audio_set_callbacks(mp, play, pause, resume, flush, drain, opaque):
     '''Sets callbacks and private data for decoded audio.
@@ -6856,8 +7068,10 @@ def libvlc_audio_set_callbacks(mp, play, pause, resume, flush, drain, opaque):
     '''
     f = _Cfunctions.get('libvlc_audio_set_callbacks', None) or \
         _Cfunction('libvlc_audio_set_callbacks', ((1,), (1,), (1,), (1,), (1,), (1,), (1,),), None,
-                    None, MediaPlayer, AudioPlayCb, AudioPauseCb, AudioResumeCb, AudioFlushCb, AudioDrainCb, ctypes.c_void_p)
+                   None, MediaPlayer, AudioPlayCb, AudioPauseCb, AudioResumeCb, AudioFlushCb, AudioDrainCb,
+                   ctypes.c_void_p)
     return f(mp, play, pause, resume, flush, drain, opaque)
+
 
 def libvlc_audio_set_volume_callback(mp, set_volume):
     '''Set callbacks and private data for decoded audio. This only works in
@@ -6870,8 +7084,9 @@ def libvlc_audio_set_volume_callback(mp, set_volume):
     '''
     f = _Cfunctions.get('libvlc_audio_set_volume_callback', None) or \
         _Cfunction('libvlc_audio_set_volume_callback', ((1,), (1,),), None,
-                    None, MediaPlayer, AudioSetVolumeCb)
+                   None, MediaPlayer, AudioSetVolumeCb)
     return f(mp, set_volume)
+
 
 def libvlc_audio_set_format_callbacks(mp, setup, cleanup):
     '''Sets decoded audio format via callbacks.
@@ -6883,23 +7098,25 @@ def libvlc_audio_set_format_callbacks(mp, setup, cleanup):
     '''
     f = _Cfunctions.get('libvlc_audio_set_format_callbacks', None) or \
         _Cfunction('libvlc_audio_set_format_callbacks', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, AudioSetupCb, AudioCleanupCb)
+                   None, MediaPlayer, AudioSetupCb, AudioCleanupCb)
     return f(mp, setup, cleanup)
+
 
 def libvlc_audio_set_format(mp, format, rate, channels):
     '''Sets a fixed decoded audio format.
     This only works in combination with L{libvlc_audio_set_callbacks}(),
     and is mutually exclusive with L{libvlc_audio_set_format_callbacks}().
     @param mp: the media player.
-    @param format: a four-characters string identifying the sample format (e.g. "S16N" or "FL32").
+    @param format: a four-characters string identifying the sample format (e.g. "S16N" or "f32l").
     @param rate: sample rate (expressed in Hz).
     @param channels: channels count.
     @version: LibVLC 2.0.0 or later.
     '''
     f = _Cfunctions.get('libvlc_audio_set_format', None) or \
         _Cfunction('libvlc_audio_set_format', ((1,), (1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_char_p, ctypes.c_uint, ctypes.c_uint)
+                   None, MediaPlayer, ctypes.c_char_p, ctypes.c_uint, ctypes.c_uint)
     return f(mp, format, rate, channels)
+
 
 def libvlc_media_player_get_length(p_mi):
     '''Get the current movie length (in ms).
@@ -6908,8 +7125,9 @@ def libvlc_media_player_get_length(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_length', None) or \
         _Cfunction('libvlc_media_player_get_length', ((1,),), None,
-                    ctypes.c_longlong, MediaPlayer)
+                   ctypes.c_longlong, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_get_time(p_mi):
     '''Get the current movie time (in ms).
@@ -6918,8 +7136,9 @@ def libvlc_media_player_get_time(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_time', None) or \
         _Cfunction('libvlc_media_player_get_time', ((1,),), None,
-                    ctypes.c_longlong, MediaPlayer)
+                   ctypes.c_longlong, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_time(p_mi, i_time):
     '''Set the movie time (in ms). This has no effect if no media is being played.
@@ -6929,8 +7148,9 @@ def libvlc_media_player_set_time(p_mi, i_time):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_time', None) or \
         _Cfunction('libvlc_media_player_set_time', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_longlong)
+                   None, MediaPlayer, ctypes.c_longlong)
     return f(p_mi, i_time)
+
 
 def libvlc_media_player_get_position(p_mi):
     '''Get movie position as percentage between 0.0 and 1.0.
@@ -6939,8 +7159,9 @@ def libvlc_media_player_get_position(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_position', None) or \
         _Cfunction('libvlc_media_player_get_position', ((1,),), None,
-                    ctypes.c_float, MediaPlayer)
+                   ctypes.c_float, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_position(p_mi, f_pos):
     '''Set movie position as percentage between 0.0 and 1.0.
@@ -6951,8 +7172,9 @@ def libvlc_media_player_set_position(p_mi, f_pos):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_position', None) or \
         _Cfunction('libvlc_media_player_set_position', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_float)
+                   None, MediaPlayer, ctypes.c_float)
     return f(p_mi, f_pos)
+
 
 def libvlc_media_player_set_chapter(p_mi, i_chapter):
     '''Set movie chapter (if applicable).
@@ -6961,8 +7183,9 @@ def libvlc_media_player_set_chapter(p_mi, i_chapter):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_chapter', None) or \
         _Cfunction('libvlc_media_player_set_chapter', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_chapter)
+
 
 def libvlc_media_player_get_chapter(p_mi):
     '''Get movie chapter.
@@ -6971,8 +7194,9 @@ def libvlc_media_player_get_chapter(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_chapter', None) or \
         _Cfunction('libvlc_media_player_get_chapter', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_get_chapter_count(p_mi):
     '''Get movie chapter count.
@@ -6981,8 +7205,9 @@ def libvlc_media_player_get_chapter_count(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_chapter_count', None) or \
         _Cfunction('libvlc_media_player_get_chapter_count', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_will_play(p_mi):
     '''Is the player able to play.
@@ -6991,8 +7216,9 @@ def libvlc_media_player_will_play(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_will_play', None) or \
         _Cfunction('libvlc_media_player_will_play', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_get_chapter_count_for_title(p_mi, i_title):
     '''Get title chapter count.
@@ -7002,8 +7228,9 @@ def libvlc_media_player_get_chapter_count_for_title(p_mi, i_title):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_chapter_count_for_title', None) or \
         _Cfunction('libvlc_media_player_get_chapter_count_for_title', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_title)
+
 
 def libvlc_media_player_set_title(p_mi, i_title):
     '''Set movie title.
@@ -7012,8 +7239,9 @@ def libvlc_media_player_set_title(p_mi, i_title):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_title', None) or \
         _Cfunction('libvlc_media_player_set_title', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_title)
+
 
 def libvlc_media_player_get_title(p_mi):
     '''Get movie title.
@@ -7022,8 +7250,9 @@ def libvlc_media_player_get_title(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_title', None) or \
         _Cfunction('libvlc_media_player_get_title', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_get_title_count(p_mi):
     '''Get movie title count.
@@ -7032,8 +7261,9 @@ def libvlc_media_player_get_title_count(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_title_count', None) or \
         _Cfunction('libvlc_media_player_get_title_count', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_previous_chapter(p_mi):
     '''Set previous chapter (if applicable).
@@ -7041,8 +7271,9 @@ def libvlc_media_player_previous_chapter(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_previous_chapter', None) or \
         _Cfunction('libvlc_media_player_previous_chapter', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_next_chapter(p_mi):
     '''Set next chapter (if applicable).
@@ -7050,8 +7281,9 @@ def libvlc_media_player_next_chapter(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_next_chapter', None) or \
         _Cfunction('libvlc_media_player_next_chapter', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_get_rate(p_mi):
     '''Get the requested movie play rate.
@@ -7062,8 +7294,9 @@ def libvlc_media_player_get_rate(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_rate', None) or \
         _Cfunction('libvlc_media_player_get_rate', ((1,),), None,
-                    ctypes.c_float, MediaPlayer)
+                   ctypes.c_float, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_rate(p_mi, rate):
     '''Set movie play rate.
@@ -7073,8 +7306,9 @@ def libvlc_media_player_set_rate(p_mi, rate):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_rate', None) or \
         _Cfunction('libvlc_media_player_set_rate', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_float)
+                   ctypes.c_int, MediaPlayer, ctypes.c_float)
     return f(p_mi, rate)
+
 
 def libvlc_media_player_get_state(p_mi):
     '''Get current movie state.
@@ -7083,8 +7317,9 @@ def libvlc_media_player_get_state(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_state', None) or \
         _Cfunction('libvlc_media_player_get_state', ((1,),), None,
-                    State, MediaPlayer)
+                   State, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_has_vout(p_mi):
     '''How many video outputs does this media player have?
@@ -7093,8 +7328,9 @@ def libvlc_media_player_has_vout(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_has_vout', None) or \
         _Cfunction('libvlc_media_player_has_vout', ((1,),), None,
-                    ctypes.c_uint, MediaPlayer)
+                   ctypes.c_uint, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_is_seekable(p_mi):
     '''Is this media player seekable?
@@ -7103,8 +7339,9 @@ def libvlc_media_player_is_seekable(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_is_seekable', None) or \
         _Cfunction('libvlc_media_player_is_seekable', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_can_pause(p_mi):
     '''Can this media player be paused?
@@ -7113,8 +7350,9 @@ def libvlc_media_player_can_pause(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_can_pause', None) or \
         _Cfunction('libvlc_media_player_can_pause', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_program_scrambled(p_mi):
     '''Check if the current program is scrambled.
@@ -7124,8 +7362,9 @@ def libvlc_media_player_program_scrambled(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_program_scrambled', None) or \
         _Cfunction('libvlc_media_player_program_scrambled', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_next_frame(p_mi):
     '''Display the next frame (if supported).
@@ -7133,8 +7372,9 @@ def libvlc_media_player_next_frame(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_next_frame', None) or \
         _Cfunction('libvlc_media_player_next_frame', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_navigate(p_mi, navigate):
     '''Navigate through DVD Menu.
@@ -7144,8 +7384,9 @@ def libvlc_media_player_navigate(p_mi, navigate):
     '''
     f = _Cfunctions.get('libvlc_media_player_navigate', None) or \
         _Cfunction('libvlc_media_player_navigate', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint)
+                   None, MediaPlayer, ctypes.c_uint)
     return f(p_mi, navigate)
+
 
 def libvlc_media_player_set_video_title_display(p_mi, position, timeout):
     '''Set if, and how, the video title will be shown when media is played.
@@ -7156,8 +7397,9 @@ def libvlc_media_player_set_video_title_display(p_mi, position, timeout):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_video_title_display', None) or \
         _Cfunction('libvlc_media_player_set_video_title_display', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, Position, ctypes.c_int)
+                   None, MediaPlayer, Position, ctypes.c_int)
     return f(p_mi, position, timeout)
+
 
 def libvlc_media_player_add_slave(p_mi, i_type, psz_uri, b_select):
     '''Add a slave to the current media player.
@@ -7172,8 +7414,9 @@ def libvlc_media_player_add_slave(p_mi, i_type, psz_uri, b_select):
     '''
     f = _Cfunctions.get('libvlc_media_player_add_slave', None) or \
         _Cfunction('libvlc_media_player_add_slave', ((1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, MediaSlaveType, ctypes.c_char_p, ctypes.c_bool)
+                   ctypes.c_int, MediaPlayer, MediaSlaveType, ctypes.c_char_p, ctypes.c_bool)
     return f(p_mi, i_type, psz_uri, b_select)
+
 
 def libvlc_track_description_list_release(p_track_description):
     '''Release (free) L{TrackDescription}.
@@ -7181,8 +7424,9 @@ def libvlc_track_description_list_release(p_track_description):
     '''
     f = _Cfunctions.get('libvlc_track_description_list_release', None) or \
         _Cfunction('libvlc_track_description_list_release', ((1,),), None,
-                    None, ctypes.POINTER(TrackDescription))
+                   None, ctypes.POINTER(TrackDescription))
     return f(p_track_description)
+
 
 def libvlc_toggle_fullscreen(p_mi):
     '''Toggle fullscreen status on non-embedded video outputs.
@@ -7192,8 +7436,9 @@ def libvlc_toggle_fullscreen(p_mi):
     '''
     f = _Cfunctions.get('libvlc_toggle_fullscreen', None) or \
         _Cfunction('libvlc_toggle_fullscreen', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_set_fullscreen(p_mi, b_fullscreen):
     '''Enable or disable fullscreen.
@@ -7208,8 +7453,9 @@ def libvlc_set_fullscreen(p_mi, b_fullscreen):
     '''
     f = _Cfunctions.get('libvlc_set_fullscreen', None) or \
         _Cfunction('libvlc_set_fullscreen', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_int)
     return f(p_mi, b_fullscreen)
+
 
 def libvlc_get_fullscreen(p_mi):
     '''Get current fullscreen status.
@@ -7218,8 +7464,9 @@ def libvlc_get_fullscreen(p_mi):
     '''
     f = _Cfunctions.get('libvlc_get_fullscreen', None) or \
         _Cfunction('libvlc_get_fullscreen', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_key_input(p_mi, on):
     '''Enable or disable key press events handling, according to the LibVLC hotkeys
@@ -7235,8 +7482,9 @@ def libvlc_video_set_key_input(p_mi, on):
     '''
     f = _Cfunctions.get('libvlc_video_set_key_input', None) or \
         _Cfunction('libvlc_video_set_key_input', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint)
+                   None, MediaPlayer, ctypes.c_uint)
     return f(p_mi, on)
+
 
 def libvlc_video_set_mouse_input(p_mi, on):
     '''Enable or disable mouse click events handling. By default, those events are
@@ -7249,8 +7497,9 @@ def libvlc_video_set_mouse_input(p_mi, on):
     '''
     f = _Cfunctions.get('libvlc_video_set_mouse_input', None) or \
         _Cfunction('libvlc_video_set_mouse_input', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint)
+                   None, MediaPlayer, ctypes.c_uint)
     return f(p_mi, on)
+
 
 def libvlc_video_get_size(p_mi, num):
     '''Get the pixel dimensions of a video.
@@ -7260,8 +7509,10 @@ def libvlc_video_get_size(p_mi, num):
     '''
     f = _Cfunctions.get('libvlc_video_get_size', None) or \
         _Cfunction('libvlc_video_get_size', ((1,), (1,), (2,), (2,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint, ctypes.POINTER(ctypes.c_uint), ctypes.POINTER(ctypes.c_uint))
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint, ctypes.POINTER(ctypes.c_uint),
+                   ctypes.POINTER(ctypes.c_uint))
     return f(p_mi, num)
+
 
 def libvlc_video_get_cursor(p_mi, num):
     '''Get the mouse pointer coordinates over a video.
@@ -7281,8 +7532,9 @@ def libvlc_video_get_cursor(p_mi, num):
     '''
     f = _Cfunctions.get('libvlc_video_get_cursor', None) or \
         _Cfunction('libvlc_video_get_cursor', ((1,), (1,), (2,), (2,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
     return f(p_mi, num)
+
 
 def libvlc_video_get_scale(p_mi):
     '''Get the current video scaling factor.
@@ -7292,8 +7544,9 @@ def libvlc_video_get_scale(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_scale', None) or \
         _Cfunction('libvlc_video_get_scale', ((1,),), None,
-                    ctypes.c_float, MediaPlayer)
+                   ctypes.c_float, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_scale(p_mi, f_factor):
     '''Set the video scaling factor. That is the ratio of the number of pixels on
@@ -7306,8 +7559,9 @@ def libvlc_video_set_scale(p_mi, f_factor):
     '''
     f = _Cfunctions.get('libvlc_video_set_scale', None) or \
         _Cfunction('libvlc_video_set_scale', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_float)
+                   None, MediaPlayer, ctypes.c_float)
     return f(p_mi, f_factor)
+
 
 def libvlc_video_get_aspect_ratio(p_mi):
     '''Get current video aspect ratio.
@@ -7316,8 +7570,9 @@ def libvlc_video_get_aspect_ratio(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_aspect_ratio', None) or \
         _Cfunction('libvlc_video_get_aspect_ratio', ((1,),), string_result,
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_aspect_ratio(p_mi, psz_aspect):
     '''Set new video aspect ratio.
@@ -7326,8 +7581,9 @@ def libvlc_video_set_aspect_ratio(p_mi, psz_aspect):
     '''
     f = _Cfunctions.get('libvlc_video_set_aspect_ratio', None) or \
         _Cfunction('libvlc_video_set_aspect_ratio', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_char_p)
+                   None, MediaPlayer, ctypes.c_char_p)
     return f(p_mi, psz_aspect)
+
 
 def libvlc_video_new_viewpoint():
     '''Create a video viewpoint structure.
@@ -7336,8 +7592,9 @@ def libvlc_video_new_viewpoint():
     '''
     f = _Cfunctions.get('libvlc_video_new_viewpoint', None) or \
         _Cfunction('libvlc_video_new_viewpoint', (), None,
-                    ctypes.POINTER(VideoViewpoint))
+                   ctypes.POINTER(VideoViewpoint))
     return f()
+
 
 def libvlc_video_update_viewpoint(p_mi, p_viewpoint, b_absolute):
     '''Update the video viewpoint information.
@@ -7350,8 +7607,9 @@ def libvlc_video_update_viewpoint(p_mi, p_viewpoint, b_absolute):
     '''
     f = _Cfunctions.get('libvlc_video_update_viewpoint', None) or \
         _Cfunction('libvlc_video_update_viewpoint', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.POINTER(VideoViewpoint), ctypes.c_bool)
+                   ctypes.c_int, MediaPlayer, ctypes.POINTER(VideoViewpoint), ctypes.c_bool)
     return f(p_mi, p_viewpoint, b_absolute)
+
 
 def libvlc_video_get_spu(p_mi):
     '''Get current video subtitle.
@@ -7360,8 +7618,9 @@ def libvlc_video_get_spu(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_spu', None) or \
         _Cfunction('libvlc_video_get_spu', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_spu_count(p_mi):
     '''Get the number of available video subtitles.
@@ -7370,8 +7629,9 @@ def libvlc_video_get_spu_count(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_spu_count', None) or \
         _Cfunction('libvlc_video_get_spu_count', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_spu_description(p_mi):
     '''Get the description of available video subtitles.
@@ -7380,8 +7640,9 @@ def libvlc_video_get_spu_description(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_spu_description', None) or \
         _Cfunction('libvlc_video_get_spu_description', ((1,),), None,
-                    ctypes.POINTER(TrackDescription), MediaPlayer)
+                   ctypes.POINTER(TrackDescription), MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_spu(p_mi, i_spu):
     '''Set new video subtitle.
@@ -7391,8 +7652,9 @@ def libvlc_video_set_spu(p_mi, i_spu):
     '''
     f = _Cfunctions.get('libvlc_video_set_spu', None) or \
         _Cfunction('libvlc_video_set_spu', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_spu)
+
 
 def libvlc_video_get_spu_delay(p_mi):
     '''Get the current subtitle delay. Positive values means subtitles are being
@@ -7403,8 +7665,9 @@ def libvlc_video_get_spu_delay(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_spu_delay', None) or \
         _Cfunction('libvlc_video_get_spu_delay', ((1,),), None,
-                    ctypes.c_int64, MediaPlayer)
+                   ctypes.c_int64, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_spu_delay(p_mi, i_delay):
     '''Set the subtitle delay. This affects the timing of when the subtitle will
@@ -7418,8 +7681,9 @@ def libvlc_video_set_spu_delay(p_mi, i_delay):
     '''
     f = _Cfunctions.get('libvlc_video_set_spu_delay', None) or \
         _Cfunction('libvlc_video_set_spu_delay', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int64)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int64)
     return f(p_mi, i_delay)
+
 
 def libvlc_media_player_get_full_title_descriptions(p_mi, titles):
     '''Get the full description of available titles.
@@ -7430,8 +7694,9 @@ def libvlc_media_player_get_full_title_descriptions(p_mi, titles):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_full_title_descriptions', None) or \
         _Cfunction('libvlc_media_player_get_full_title_descriptions', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.POINTER(ctypes.POINTER(TitleDescription)))
+                   ctypes.c_int, MediaPlayer, ctypes.POINTER(ctypes.POINTER(TitleDescription)))
     return f(p_mi, titles)
+
 
 def libvlc_title_descriptions_release(p_titles, i_count):
     '''Release a title description.
@@ -7441,8 +7706,9 @@ def libvlc_title_descriptions_release(p_titles, i_count):
     '''
     f = _Cfunctions.get('libvlc_title_descriptions_release', None) or \
         _Cfunction('libvlc_title_descriptions_release', ((1,), (1,),), None,
-                    None, ctypes.POINTER(TitleDescription), ctypes.c_uint)
+                   None, ctypes.POINTER(TitleDescription), ctypes.c_uint)
     return f(p_titles, i_count)
+
 
 def libvlc_media_player_get_full_chapter_descriptions(p_mi, i_chapters_of_title, pp_chapters):
     '''Get the full description of available chapters.
@@ -7454,8 +7720,9 @@ def libvlc_media_player_get_full_chapter_descriptions(p_mi, i_chapters_of_title,
     '''
     f = _Cfunctions.get('libvlc_media_player_get_full_chapter_descriptions', None) or \
         _Cfunction('libvlc_media_player_get_full_chapter_descriptions', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int, ctypes.POINTER(ctypes.POINTER(ChapterDescription)))
+                   ctypes.c_int, MediaPlayer, ctypes.c_int, ctypes.POINTER(ctypes.POINTER(ChapterDescription)))
     return f(p_mi, i_chapters_of_title, pp_chapters)
+
 
 def libvlc_chapter_descriptions_release(p_chapters, i_count):
     '''Release a chapter description.
@@ -7465,8 +7732,9 @@ def libvlc_chapter_descriptions_release(p_chapters, i_count):
     '''
     f = _Cfunctions.get('libvlc_chapter_descriptions_release', None) or \
         _Cfunction('libvlc_chapter_descriptions_release', ((1,), (1,),), None,
-                    None, ctypes.POINTER(ChapterDescription), ctypes.c_uint)
+                   None, ctypes.POINTER(ChapterDescription), ctypes.c_uint)
     return f(p_chapters, i_count)
+
 
 def libvlc_video_get_crop_geometry(p_mi):
     '''Get current crop filter geometry.
@@ -7475,8 +7743,9 @@ def libvlc_video_get_crop_geometry(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_crop_geometry', None) or \
         _Cfunction('libvlc_video_get_crop_geometry', ((1,),), string_result,
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_crop_geometry(p_mi, psz_geometry):
     '''Set new crop filter geometry.
@@ -7485,8 +7754,9 @@ def libvlc_video_set_crop_geometry(p_mi, psz_geometry):
     '''
     f = _Cfunctions.get('libvlc_video_set_crop_geometry', None) or \
         _Cfunction('libvlc_video_set_crop_geometry', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_char_p)
+                   None, MediaPlayer, ctypes.c_char_p)
     return f(p_mi, psz_geometry)
+
 
 def libvlc_video_get_teletext(p_mi):
     '''Get current teletext page requested or 0 if it's disabled.
@@ -7497,8 +7767,9 @@ def libvlc_video_get_teletext(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_teletext', None) or \
         _Cfunction('libvlc_video_get_teletext', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_teletext(p_mi, i_page):
     '''Set new teletext page to retrieve.
@@ -7508,8 +7779,9 @@ def libvlc_video_set_teletext(p_mi, i_page):
     '''
     f = _Cfunctions.get('libvlc_video_set_teletext', None) or \
         _Cfunction('libvlc_video_set_teletext', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_page)
+
 
 def libvlc_video_get_track_count(p_mi):
     '''Get number of available video tracks.
@@ -7518,8 +7790,9 @@ def libvlc_video_get_track_count(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_track_count', None) or \
         _Cfunction('libvlc_video_get_track_count', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_track_description(p_mi):
     '''Get the description of available video tracks.
@@ -7528,8 +7801,9 @@ def libvlc_video_get_track_description(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_track_description', None) or \
         _Cfunction('libvlc_video_get_track_description', ((1,),), None,
-                    ctypes.POINTER(TrackDescription), MediaPlayer)
+                   ctypes.POINTER(TrackDescription), MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_get_track(p_mi):
     '''Get current video track.
@@ -7538,8 +7812,9 @@ def libvlc_video_get_track(p_mi):
     '''
     f = _Cfunctions.get('libvlc_video_get_track', None) or \
         _Cfunction('libvlc_video_get_track', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_video_set_track(p_mi, i_track):
     '''Set video track.
@@ -7549,8 +7824,9 @@ def libvlc_video_set_track(p_mi, i_track):
     '''
     f = _Cfunctions.get('libvlc_video_set_track', None) or \
         _Cfunction('libvlc_video_set_track', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_track)
+
 
 def libvlc_video_take_snapshot(p_mi, num, psz_filepath, i_width, i_height):
     '''Take a snapshot of the current video window.
@@ -7565,8 +7841,9 @@ def libvlc_video_take_snapshot(p_mi, num, psz_filepath, i_width, i_height):
     '''
     f = _Cfunctions.get('libvlc_video_take_snapshot', None) or \
         _Cfunction('libvlc_video_take_snapshot', ((1,), (1,), (1,), (1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint, ctypes.c_char_p, ctypes.c_int, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint, ctypes.c_char_p, ctypes.c_int, ctypes.c_int)
     return f(p_mi, num, psz_filepath, i_width, i_height)
+
 
 def libvlc_video_set_deinterlace(p_mi, psz_mode):
     '''Enable or disable deinterlace filter.
@@ -7575,8 +7852,9 @@ def libvlc_video_set_deinterlace(p_mi, psz_mode):
     '''
     f = _Cfunctions.get('libvlc_video_set_deinterlace', None) or \
         _Cfunction('libvlc_video_set_deinterlace', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_char_p)
+                   None, MediaPlayer, ctypes.c_char_p)
     return f(p_mi, psz_mode)
+
 
 def libvlc_video_get_marquee_int(p_mi, option):
     '''Get an integer marquee option value.
@@ -7585,8 +7863,9 @@ def libvlc_video_get_marquee_int(p_mi, option):
     '''
     f = _Cfunctions.get('libvlc_video_get_marquee_int', None) or \
         _Cfunction('libvlc_video_get_marquee_int', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint)
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint)
     return f(p_mi, option)
+
 
 def libvlc_video_get_marquee_string(p_mi, option):
     '''Get a string marquee option value.
@@ -7595,8 +7874,9 @@ def libvlc_video_get_marquee_string(p_mi, option):
     '''
     f = _Cfunctions.get('libvlc_video_get_marquee_string', None) or \
         _Cfunction('libvlc_video_get_marquee_string', ((1,), (1,),), string_result,
-                    ctypes.c_void_p, MediaPlayer, ctypes.c_uint)
+                   ctypes.c_void_p, MediaPlayer, ctypes.c_uint)
     return f(p_mi, option)
+
 
 def libvlc_video_set_marquee_int(p_mi, option, i_val):
     '''Enable, disable or set an integer marquee option
@@ -7608,8 +7888,9 @@ def libvlc_video_set_marquee_int(p_mi, option, i_val):
     '''
     f = _Cfunctions.get('libvlc_video_set_marquee_int', None) or \
         _Cfunction('libvlc_video_set_marquee_int', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_uint, ctypes.c_int)
     return f(p_mi, option, i_val)
+
 
 def libvlc_video_set_marquee_string(p_mi, option, psz_text):
     '''Set a marquee string option.
@@ -7619,8 +7900,9 @@ def libvlc_video_set_marquee_string(p_mi, option, psz_text):
     '''
     f = _Cfunctions.get('libvlc_video_set_marquee_string', None) or \
         _Cfunction('libvlc_video_set_marquee_string', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint, ctypes.c_char_p)
+                   None, MediaPlayer, ctypes.c_uint, ctypes.c_char_p)
     return f(p_mi, option, psz_text)
+
 
 def libvlc_video_get_logo_int(p_mi, option):
     '''Get integer logo option.
@@ -7629,8 +7911,9 @@ def libvlc_video_get_logo_int(p_mi, option):
     '''
     f = _Cfunctions.get('libvlc_video_get_logo_int', None) or \
         _Cfunction('libvlc_video_get_logo_int', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint)
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint)
     return f(p_mi, option)
+
 
 def libvlc_video_set_logo_int(p_mi, option, value):
     '''Set logo option as integer. Options that take a different type value
@@ -7643,8 +7926,9 @@ def libvlc_video_set_logo_int(p_mi, option, value):
     '''
     f = _Cfunctions.get('libvlc_video_set_logo_int', None) or \
         _Cfunction('libvlc_video_set_logo_int', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_uint, ctypes.c_int)
     return f(p_mi, option, value)
+
 
 def libvlc_video_set_logo_string(p_mi, option, psz_value):
     '''Set logo option as string. Options that take a different type value
@@ -7655,8 +7939,9 @@ def libvlc_video_set_logo_string(p_mi, option, psz_value):
     '''
     f = _Cfunctions.get('libvlc_video_set_logo_string', None) or \
         _Cfunction('libvlc_video_set_logo_string', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint, ctypes.c_char_p)
+                   None, MediaPlayer, ctypes.c_uint, ctypes.c_char_p)
     return f(p_mi, option, psz_value)
+
 
 def libvlc_video_get_adjust_int(p_mi, option):
     '''Get integer adjust option.
@@ -7666,8 +7951,9 @@ def libvlc_video_get_adjust_int(p_mi, option):
     '''
     f = _Cfunctions.get('libvlc_video_get_adjust_int', None) or \
         _Cfunction('libvlc_video_get_adjust_int', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint)
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint)
     return f(p_mi, option)
+
 
 def libvlc_video_set_adjust_int(p_mi, option, value):
     '''Set adjust option as integer. Options that take a different type value
@@ -7681,8 +7967,9 @@ def libvlc_video_set_adjust_int(p_mi, option, value):
     '''
     f = _Cfunctions.get('libvlc_video_set_adjust_int', None) or \
         _Cfunction('libvlc_video_set_adjust_int', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_uint, ctypes.c_int)
     return f(p_mi, option, value)
+
 
 def libvlc_video_get_adjust_float(p_mi, option):
     '''Get float adjust option.
@@ -7692,8 +7979,9 @@ def libvlc_video_get_adjust_float(p_mi, option):
     '''
     f = _Cfunctions.get('libvlc_video_get_adjust_float', None) or \
         _Cfunction('libvlc_video_get_adjust_float', ((1,), (1,),), None,
-                    ctypes.c_float, MediaPlayer, ctypes.c_uint)
+                   ctypes.c_float, MediaPlayer, ctypes.c_uint)
     return f(p_mi, option)
+
 
 def libvlc_video_set_adjust_float(p_mi, option, value):
     '''Set adjust option as float. Options that take a different type value
@@ -7705,8 +7993,9 @@ def libvlc_video_set_adjust_float(p_mi, option, value):
     '''
     f = _Cfunctions.get('libvlc_video_set_adjust_float', None) or \
         _Cfunction('libvlc_video_set_adjust_float', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_uint, ctypes.c_float)
+                   None, MediaPlayer, ctypes.c_uint, ctypes.c_float)
     return f(p_mi, option, value)
+
 
 def libvlc_audio_output_list_get(p_instance):
     '''Gets the list of available audio output modules.
@@ -7715,8 +8004,9 @@ def libvlc_audio_output_list_get(p_instance):
     '''
     f = _Cfunctions.get('libvlc_audio_output_list_get', None) or \
         _Cfunction('libvlc_audio_output_list_get', ((1,),), None,
-                    ctypes.POINTER(AudioOutput), Instance)
+                   ctypes.POINTER(AudioOutput), Instance)
     return f(p_instance)
+
 
 def libvlc_audio_output_list_release(p_list):
     '''Frees the list of available audio output modules.
@@ -7724,8 +8014,9 @@ def libvlc_audio_output_list_release(p_list):
     '''
     f = _Cfunctions.get('libvlc_audio_output_list_release', None) or \
         _Cfunction('libvlc_audio_output_list_release', ((1,),), None,
-                    None, ctypes.POINTER(AudioOutput))
+                   None, ctypes.POINTER(AudioOutput))
     return f(p_list)
+
 
 def libvlc_audio_output_set(p_mi, psz_name):
     '''Selects an audio output module.
@@ -7737,8 +8028,9 @@ def libvlc_audio_output_set(p_mi, psz_name):
     '''
     f = _Cfunctions.get('libvlc_audio_output_set', None) or \
         _Cfunction('libvlc_audio_output_set', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_char_p)
+                   ctypes.c_int, MediaPlayer, ctypes.c_char_p)
     return f(p_mi, psz_name)
+
 
 def libvlc_audio_output_device_enum(mp):
     '''Gets a list of potential audio output devices,
@@ -7755,8 +8047,9 @@ def libvlc_audio_output_device_enum(mp):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_enum', None) or \
         _Cfunction('libvlc_audio_output_device_enum', ((1,),), None,
-                    ctypes.POINTER(AudioOutputDevice), MediaPlayer)
+                   ctypes.POINTER(AudioOutputDevice), MediaPlayer)
     return f(mp)
+
 
 def libvlc_audio_output_device_list_get(p_instance, aout):
     '''Gets a list of audio output devices for a given audio output module,
@@ -7775,8 +8068,9 @@ def libvlc_audio_output_device_list_get(p_instance, aout):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_list_get', None) or \
         _Cfunction('libvlc_audio_output_device_list_get', ((1,), (1,),), None,
-                    ctypes.POINTER(AudioOutputDevice), Instance, ctypes.c_char_p)
+                   ctypes.POINTER(AudioOutputDevice), Instance, ctypes.c_char_p)
     return f(p_instance, aout)
+
 
 def libvlc_audio_output_device_list_release(p_list):
     '''Frees a list of available audio output devices.
@@ -7785,8 +8079,9 @@ def libvlc_audio_output_device_list_release(p_list):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_list_release', None) or \
         _Cfunction('libvlc_audio_output_device_list_release', ((1,),), None,
-                    None, ctypes.POINTER(AudioOutputDevice))
+                   None, ctypes.POINTER(AudioOutputDevice))
     return f(p_list)
+
 
 def libvlc_audio_output_device_set(mp, module, device_id):
     '''Configures an explicit audio output device.
@@ -7816,8 +8111,9 @@ def libvlc_audio_output_device_set(mp, module, device_id):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_set', None) or \
         _Cfunction('libvlc_audio_output_device_set', ((1,), (1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_char_p, ctypes.c_char_p)
+                   None, MediaPlayer, ctypes.c_char_p, ctypes.c_char_p)
     return f(mp, module, device_id)
+
 
 def libvlc_audio_output_device_get(mp):
     '''Get the current audio output device identifier.
@@ -7837,8 +8133,9 @@ def libvlc_audio_output_device_get(mp):
     '''
     f = _Cfunctions.get('libvlc_audio_output_device_get', None) or \
         _Cfunction('libvlc_audio_output_device_get', ((1,),), string_result,
-                    ctypes.c_void_p, MediaPlayer)
+                   ctypes.c_void_p, MediaPlayer)
     return f(mp)
+
 
 def libvlc_audio_toggle_mute(p_mi):
     '''Toggle mute status.
@@ -7846,8 +8143,9 @@ def libvlc_audio_toggle_mute(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_toggle_mute', None) or \
         _Cfunction('libvlc_audio_toggle_mute', ((1,),), None,
-                    None, MediaPlayer)
+                   None, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_get_mute(p_mi):
     '''Get current mute status.
@@ -7856,8 +8154,9 @@ def libvlc_audio_get_mute(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_mute', None) or \
         _Cfunction('libvlc_audio_get_mute', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_set_mute(p_mi, status):
     '''Set mute status.
@@ -7866,8 +8165,9 @@ def libvlc_audio_set_mute(p_mi, status):
     '''
     f = _Cfunctions.get('libvlc_audio_set_mute', None) or \
         _Cfunction('libvlc_audio_set_mute', ((1,), (1,),), None,
-                    None, MediaPlayer, ctypes.c_int)
+                   None, MediaPlayer, ctypes.c_int)
     return f(p_mi, status)
+
 
 def libvlc_audio_get_volume(p_mi):
     '''Get current software audio volume.
@@ -7876,8 +8176,9 @@ def libvlc_audio_get_volume(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_volume', None) or \
         _Cfunction('libvlc_audio_get_volume', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_set_volume(p_mi, i_volume):
     '''Set current software audio volume.
@@ -7887,8 +8188,9 @@ def libvlc_audio_set_volume(p_mi, i_volume):
     '''
     f = _Cfunctions.get('libvlc_audio_set_volume', None) or \
         _Cfunction('libvlc_audio_set_volume', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_volume)
+
 
 def libvlc_audio_get_track_count(p_mi):
     '''Get number of available audio tracks.
@@ -7897,8 +8199,9 @@ def libvlc_audio_get_track_count(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_track_count', None) or \
         _Cfunction('libvlc_audio_get_track_count', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_get_track_description(p_mi):
     '''Get the description of available audio tracks.
@@ -7907,8 +8210,9 @@ def libvlc_audio_get_track_description(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_track_description', None) or \
         _Cfunction('libvlc_audio_get_track_description', ((1,),), None,
-                    ctypes.POINTER(TrackDescription), MediaPlayer)
+                   ctypes.POINTER(TrackDescription), MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_get_track(p_mi):
     '''Get current audio track.
@@ -7917,8 +8221,9 @@ def libvlc_audio_get_track(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_track', None) or \
         _Cfunction('libvlc_audio_get_track', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_set_track(p_mi, i_track):
     '''Set current audio track.
@@ -7928,8 +8233,9 @@ def libvlc_audio_set_track(p_mi, i_track):
     '''
     f = _Cfunctions.get('libvlc_audio_set_track', None) or \
         _Cfunction('libvlc_audio_set_track', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int)
     return f(p_mi, i_track)
+
 
 def libvlc_audio_get_channel(p_mi):
     '''Get current audio channel.
@@ -7938,8 +8244,9 @@ def libvlc_audio_get_channel(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_channel', None) or \
         _Cfunction('libvlc_audio_get_channel', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_set_channel(p_mi, channel):
     '''Set current audio channel.
@@ -7949,8 +8256,9 @@ def libvlc_audio_set_channel(p_mi, channel):
     '''
     f = _Cfunctions.get('libvlc_audio_set_channel', None) or \
         _Cfunction('libvlc_audio_set_channel', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int)
     return f(p_mi, channel)
+
 
 def libvlc_audio_get_delay(p_mi):
     '''Get current audio delay.
@@ -7960,8 +8268,9 @@ def libvlc_audio_get_delay(p_mi):
     '''
     f = _Cfunctions.get('libvlc_audio_get_delay', None) or \
         _Cfunction('libvlc_audio_get_delay', ((1,),), None,
-                    ctypes.c_int64, MediaPlayer)
+                   ctypes.c_int64, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_audio_set_delay(p_mi, i_delay):
     '''Set current audio delay. The audio delay will be reset to zero each time the media changes.
@@ -7972,8 +8281,9 @@ def libvlc_audio_set_delay(p_mi, i_delay):
     '''
     f = _Cfunctions.get('libvlc_audio_set_delay', None) or \
         _Cfunction('libvlc_audio_set_delay', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_int64)
+                   ctypes.c_int, MediaPlayer, ctypes.c_int64)
     return f(p_mi, i_delay)
+
 
 def libvlc_audio_equalizer_get_preset_count():
     '''Get the number of equalizer presets.
@@ -7982,8 +8292,9 @@ def libvlc_audio_equalizer_get_preset_count():
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_get_preset_count', None) or \
         _Cfunction('libvlc_audio_equalizer_get_preset_count', (), None,
-                    ctypes.c_uint)
+                   ctypes.c_uint)
     return f()
+
 
 def libvlc_audio_equalizer_get_preset_name(u_index):
     '''Get the name of a particular equalizer preset.
@@ -7995,8 +8306,9 @@ def libvlc_audio_equalizer_get_preset_name(u_index):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_get_preset_name', None) or \
         _Cfunction('libvlc_audio_equalizer_get_preset_name', ((1,),), None,
-                    ctypes.c_char_p, ctypes.c_uint)
+                   ctypes.c_char_p, ctypes.c_uint)
     return f(u_index)
+
 
 def libvlc_audio_equalizer_get_band_count():
     '''Get the number of distinct frequency bands for an equalizer.
@@ -8005,8 +8317,9 @@ def libvlc_audio_equalizer_get_band_count():
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_get_band_count', None) or \
         _Cfunction('libvlc_audio_equalizer_get_band_count', (), None,
-                    ctypes.c_uint)
+                   ctypes.c_uint)
     return f()
+
 
 def libvlc_audio_equalizer_get_band_frequency(u_index):
     '''Get a particular equalizer band frequency.
@@ -8018,8 +8331,9 @@ def libvlc_audio_equalizer_get_band_frequency(u_index):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_get_band_frequency', None) or \
         _Cfunction('libvlc_audio_equalizer_get_band_frequency', ((1,),), None,
-                    ctypes.c_float, ctypes.c_uint)
+                   ctypes.c_float, ctypes.c_uint)
     return f(u_index)
+
 
 def libvlc_audio_equalizer_new():
     '''Create a new default equalizer, with all frequency values zeroed.
@@ -8032,8 +8346,9 @@ def libvlc_audio_equalizer_new():
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_new', None) or \
         _Cfunction('libvlc_audio_equalizer_new', (), class_result(AudioEqualizer),
-                    ctypes.c_void_p)
+                   ctypes.c_void_p)
     return f()
+
 
 def libvlc_audio_equalizer_new_from_preset(u_index):
     '''Create a new equalizer, with initial frequency values copied from an existing
@@ -8048,8 +8363,9 @@ def libvlc_audio_equalizer_new_from_preset(u_index):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_new_from_preset', None) or \
         _Cfunction('libvlc_audio_equalizer_new_from_preset', ((1,),), class_result(AudioEqualizer),
-                    ctypes.c_void_p, ctypes.c_uint)
+                   ctypes.c_void_p, ctypes.c_uint)
     return f(u_index)
+
 
 def libvlc_audio_equalizer_release(p_equalizer):
     '''Release a previously created equalizer instance.
@@ -8061,8 +8377,9 @@ def libvlc_audio_equalizer_release(p_equalizer):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_release', None) or \
         _Cfunction('libvlc_audio_equalizer_release', ((1,),), None,
-                    None, AudioEqualizer)
+                   None, AudioEqualizer)
     return f(p_equalizer)
+
 
 def libvlc_audio_equalizer_set_preamp(p_equalizer, f_preamp):
     '''Set a new pre-amplification value for an equalizer.
@@ -8076,8 +8393,9 @@ def libvlc_audio_equalizer_set_preamp(p_equalizer, f_preamp):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_set_preamp', None) or \
         _Cfunction('libvlc_audio_equalizer_set_preamp', ((1,), (1,),), None,
-                    ctypes.c_int, AudioEqualizer, ctypes.c_float)
+                   ctypes.c_int, AudioEqualizer, ctypes.c_float)
     return f(p_equalizer, f_preamp)
+
 
 def libvlc_audio_equalizer_get_preamp(p_equalizer):
     '''Get the current pre-amplification value from an equalizer.
@@ -8087,8 +8405,9 @@ def libvlc_audio_equalizer_get_preamp(p_equalizer):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_get_preamp', None) or \
         _Cfunction('libvlc_audio_equalizer_get_preamp', ((1,),), None,
-                    ctypes.c_float, AudioEqualizer)
+                   ctypes.c_float, AudioEqualizer)
     return f(p_equalizer)
+
 
 def libvlc_audio_equalizer_set_amp_at_index(p_equalizer, f_amp, u_band):
     '''Set a new amplification value for a particular equalizer frequency band.
@@ -8103,8 +8422,9 @@ def libvlc_audio_equalizer_set_amp_at_index(p_equalizer, f_amp, u_band):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_set_amp_at_index', None) or \
         _Cfunction('libvlc_audio_equalizer_set_amp_at_index', ((1,), (1,), (1,),), None,
-                    ctypes.c_int, AudioEqualizer, ctypes.c_float, ctypes.c_uint)
+                   ctypes.c_int, AudioEqualizer, ctypes.c_float, ctypes.c_uint)
     return f(p_equalizer, f_amp, u_band)
+
 
 def libvlc_audio_equalizer_get_amp_at_index(p_equalizer, u_band):
     '''Get the amplification value for a particular equalizer frequency band.
@@ -8115,8 +8435,9 @@ def libvlc_audio_equalizer_get_amp_at_index(p_equalizer, u_band):
     '''
     f = _Cfunctions.get('libvlc_audio_equalizer_get_amp_at_index', None) or \
         _Cfunction('libvlc_audio_equalizer_get_amp_at_index', ((1,), (1,),), None,
-                    ctypes.c_float, AudioEqualizer, ctypes.c_uint)
+                   ctypes.c_float, AudioEqualizer, ctypes.c_uint)
     return f(p_equalizer, u_band)
+
 
 def libvlc_media_player_set_equalizer(p_mi, p_equalizer):
     '''Apply new equalizer settings to a media player.
@@ -8141,8 +8462,9 @@ def libvlc_media_player_set_equalizer(p_mi, p_equalizer):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_equalizer', None) or \
         _Cfunction('libvlc_media_player_set_equalizer', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, AudioEqualizer)
+                   ctypes.c_int, MediaPlayer, AudioEqualizer)
     return f(p_mi, p_equalizer)
+
 
 def libvlc_media_player_get_role(p_mi):
     '''Gets the media role.
@@ -8152,8 +8474,9 @@ def libvlc_media_player_get_role(p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_player_get_role', None) or \
         _Cfunction('libvlc_media_player_get_role', ((1,),), None,
-                    ctypes.c_int, MediaPlayer)
+                   ctypes.c_int, MediaPlayer)
     return f(p_mi)
+
 
 def libvlc_media_player_set_role(p_mi, role):
     '''Sets the media role.
@@ -8163,8 +8486,9 @@ def libvlc_media_player_set_role(p_mi, role):
     '''
     f = _Cfunctions.get('libvlc_media_player_set_role', None) or \
         _Cfunction('libvlc_media_player_set_role', ((1,), (1,),), None,
-                    ctypes.c_int, MediaPlayer, ctypes.c_uint)
+                   ctypes.c_int, MediaPlayer, ctypes.c_uint)
     return f(p_mi, role)
+
 
 def libvlc_media_list_player_new(p_instance):
     '''Create new media_list_player.
@@ -8173,8 +8497,9 @@ def libvlc_media_list_player_new(p_instance):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_new', None) or \
         _Cfunction('libvlc_media_list_player_new', ((1,),), class_result(MediaListPlayer),
-                    ctypes.c_void_p, Instance)
+                   ctypes.c_void_p, Instance)
     return f(p_instance)
+
 
 def libvlc_media_list_player_release(p_mlp):
     '''Release a media_list_player after use
@@ -8186,8 +8511,9 @@ def libvlc_media_list_player_release(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_release', None) or \
         _Cfunction('libvlc_media_list_player_release', ((1,),), None,
-                    None, MediaListPlayer)
+                   None, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_retain(p_mlp):
     '''Retain a reference to a media player list object. Use
@@ -8196,8 +8522,9 @@ def libvlc_media_list_player_retain(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_retain', None) or \
         _Cfunction('libvlc_media_list_player_retain', ((1,),), None,
-                    None, MediaListPlayer)
+                   None, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_event_manager(p_mlp):
     '''Return the event manager of this media_list_player.
@@ -8206,8 +8533,9 @@ def libvlc_media_list_player_event_manager(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_event_manager', None) or \
         _Cfunction('libvlc_media_list_player_event_manager', ((1,),), class_result(EventManager),
-                    ctypes.c_void_p, MediaListPlayer)
+                   ctypes.c_void_p, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_set_media_player(p_mlp, p_mi):
     '''Replace media player in media_list_player with this instance.
@@ -8216,8 +8544,9 @@ def libvlc_media_list_player_set_media_player(p_mlp, p_mi):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_set_media_player', None) or \
         _Cfunction('libvlc_media_list_player_set_media_player', ((1,), (1,),), None,
-                    None, MediaListPlayer, MediaPlayer)
+                   None, MediaListPlayer, MediaPlayer)
     return f(p_mlp, p_mi)
+
 
 def libvlc_media_list_player_get_media_player(p_mlp):
     '''Get media player of the media_list_player instance.
@@ -8226,8 +8555,9 @@ def libvlc_media_list_player_get_media_player(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_get_media_player', None) or \
         _Cfunction('libvlc_media_list_player_get_media_player', ((1,),), class_result(MediaPlayer),
-                    ctypes.c_void_p, MediaListPlayer)
+                   ctypes.c_void_p, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_set_media_list(p_mlp, p_mlist):
     '''Set the media list associated with the player.
@@ -8236,8 +8566,9 @@ def libvlc_media_list_player_set_media_list(p_mlp, p_mlist):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_set_media_list', None) or \
         _Cfunction('libvlc_media_list_player_set_media_list', ((1,), (1,),), None,
-                    None, MediaListPlayer, MediaList)
+                   None, MediaListPlayer, MediaList)
     return f(p_mlp, p_mlist)
+
 
 def libvlc_media_list_player_play(p_mlp):
     '''Play media list.
@@ -8245,8 +8576,9 @@ def libvlc_media_list_player_play(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_play', None) or \
         _Cfunction('libvlc_media_list_player_play', ((1,),), None,
-                    None, MediaListPlayer)
+                   None, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_pause(p_mlp):
     '''Toggle pause (or resume) media list.
@@ -8254,8 +8586,9 @@ def libvlc_media_list_player_pause(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_pause', None) or \
         _Cfunction('libvlc_media_list_player_pause', ((1,),), None,
-                    None, MediaListPlayer)
+                   None, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_set_pause(p_mlp, do_pause):
     '''Pause or resume media list.
@@ -8265,8 +8598,9 @@ def libvlc_media_list_player_set_pause(p_mlp, do_pause):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_set_pause', None) or \
         _Cfunction('libvlc_media_list_player_set_pause', ((1,), (1,),), None,
-                    None, MediaListPlayer, ctypes.c_int)
+                   None, MediaListPlayer, ctypes.c_int)
     return f(p_mlp, do_pause)
+
 
 def libvlc_media_list_player_is_playing(p_mlp):
     '''Is media list playing?
@@ -8275,8 +8609,9 @@ def libvlc_media_list_player_is_playing(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_is_playing', None) or \
         _Cfunction('libvlc_media_list_player_is_playing', ((1,),), None,
-                    ctypes.c_int, MediaListPlayer)
+                   ctypes.c_int, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_get_state(p_mlp):
     '''Get current libvlc_state of media list player.
@@ -8285,8 +8620,9 @@ def libvlc_media_list_player_get_state(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_get_state', None) or \
         _Cfunction('libvlc_media_list_player_get_state', ((1,),), None,
-                    State, MediaListPlayer)
+                   State, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_play_item_at_index(p_mlp, i_index):
     '''Play media list item at position index.
@@ -8296,8 +8632,9 @@ def libvlc_media_list_player_play_item_at_index(p_mlp, i_index):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_play_item_at_index', None) or \
         _Cfunction('libvlc_media_list_player_play_item_at_index', ((1,), (1,),), None,
-                    ctypes.c_int, MediaListPlayer, ctypes.c_int)
+                   ctypes.c_int, MediaListPlayer, ctypes.c_int)
     return f(p_mlp, i_index)
+
 
 def libvlc_media_list_player_play_item(p_mlp, p_md):
     '''Play the given media item.
@@ -8307,8 +8644,9 @@ def libvlc_media_list_player_play_item(p_mlp, p_md):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_play_item', None) or \
         _Cfunction('libvlc_media_list_player_play_item', ((1,), (1,),), None,
-                    ctypes.c_int, MediaListPlayer, Media)
+                   ctypes.c_int, MediaListPlayer, Media)
     return f(p_mlp, p_md)
+
 
 def libvlc_media_list_player_stop(p_mlp):
     '''Stop playing media list.
@@ -8316,8 +8654,9 @@ def libvlc_media_list_player_stop(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_stop', None) or \
         _Cfunction('libvlc_media_list_player_stop', ((1,),), None,
-                    None, MediaListPlayer)
+                   None, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_next(p_mlp):
     '''Play next item from media list.
@@ -8326,8 +8665,9 @@ def libvlc_media_list_player_next(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_next', None) or \
         _Cfunction('libvlc_media_list_player_next', ((1,),), None,
-                    ctypes.c_int, MediaListPlayer)
+                   ctypes.c_int, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_previous(p_mlp):
     '''Play previous item from media list.
@@ -8336,8 +8676,9 @@ def libvlc_media_list_player_previous(p_mlp):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_previous', None) or \
         _Cfunction('libvlc_media_list_player_previous', ((1,),), None,
-                    ctypes.c_int, MediaListPlayer)
+                   ctypes.c_int, MediaListPlayer)
     return f(p_mlp)
+
 
 def libvlc_media_list_player_set_playback_mode(p_mlp, e_mode):
     '''Sets the playback mode for the playlist.
@@ -8346,7 +8687,7 @@ def libvlc_media_list_player_set_playback_mode(p_mlp, e_mode):
     '''
     f = _Cfunctions.get('libvlc_media_list_player_set_playback_mode', None) or \
         _Cfunction('libvlc_media_list_player_set_playback_mode', ((1,), (1,),), None,
-                    None, MediaListPlayer, PlaybackMode)
+                   None, MediaListPlayer, PlaybackMode)
     return f(p_mlp, e_mode)
 
 
@@ -8405,6 +8746,7 @@ def callbackmethod(callback):
     """Now obsolete @callbackmethod decorator."""
     return callback
 
+
 # libvlc_free is not present in some versions of libvlc. If it is not
 # in the library, then emulate it by calling libc.free
 if not hasattr(dll, 'libvlc_free'):
@@ -8424,7 +8766,8 @@ if not hasattr(dll, 'libvlc_free'):
 
     # ensure argtypes is right, because default type of int won't
     # work on 64-bit systems
-    libvlc_free.argtypes = [ ctypes.c_void_p ]
+    libvlc_free.argtypes = [ctypes.c_void_p]
+
 
 # Version functions
 def _dot2int(v):
@@ -8445,6 +8788,7 @@ def _dot2int(v):
         i = (i << 8) + t.pop(0)
     return i
 
+
 def hex_version():
     """Return the version of these bindings in hex or 0 if unavailable.
     """
@@ -8453,6 +8797,7 @@ def hex_version():
     except (NameError, ValueError):
         return 0
 
+
 def libvlc_hex_version():
     """Return the libvlc version in hex or 0 if unavailable.
     """
@@ -8460,6 +8805,7 @@ def libvlc_hex_version():
         return _dot2int(bytes_to_str(libvlc_get_version()).split()[0])
     except ValueError:
         return 0
+
 
 def debug_callback(event, *args, **kwds):
     '''Example callback, useful for debugging.
@@ -8480,6 +8826,7 @@ if __name__ == '__main__':
         import termios
         import tty
 
+
         def getch():  # getchar(), getc(stdin)  #PYCHOK flake
             fd = sys.stdin.fileno()
             old = termios.tcgetattr(fd)
@@ -8490,17 +8837,22 @@ if __name__ == '__main__':
                 termios.tcsetattr(fd, termios.TCSADRAIN, old)
             return ch
 
+
     def end_callback(event):
         print('End of media stream (event %s)' % event.type)
         sys.exit(0)
 
+
     echo_position = False
+
+
     def pos_callback(event, player):
         if echo_position:
             sys.stdout.write('\r%s to %.2f%% (%.2f%%)' % (event.type,
                                                           event.u.new_position * 100,
                                                           player.get_position() * 100))
             sys.stdout.flush()
+
 
     def print_python():
         from platform import architecture, mac_ver, uname, win32_ver
@@ -8523,6 +8875,7 @@ if __name__ == '__main__':
                 t = (t,) + uname()[0:3:2]
         print(' '.join(t))
 
+
     def print_version():
         """Print version of this vlc.py and of the libvlc"""
         try:
@@ -8533,6 +8886,7 @@ if __name__ == '__main__':
                 print('Plugin path: %s' % plugin_path)
         except Exception:
             print('Error: %s' % sys.exc_info()[1])
+
 
     if '-h' in sys.argv[:2] or '--help' in sys.argv[:2]:
         print('Usage: %s [options] <movie_filename>' % sys.argv[0])
@@ -8583,12 +8937,14 @@ if __name__ == '__main__':
         # any number of positional and/or keyword arguments to be passed
         # to the callback (in addition to the first one, an Event instance).
         event_manager = player.event_manager()
-        event_manager.event_attach(EventType.MediaPlayerEndReached,      end_callback)
+        event_manager.event_attach(EventType.MediaPlayerEndReached, end_callback)
         event_manager.event_attach(EventType.MediaPlayerPositionChanged, pos_callback, player)
+
 
         def mspf():
             """Milliseconds per frame"""
             return int(1000 // (player.get_fps() or 25))
+
 
         def print_info():
             """Print information about the media"""
@@ -8605,25 +8961,30 @@ if __name__ == '__main__':
                 print('Video size: %s' % str(player.video_get_size(0)))  # num=0
                 print('Scale: %s' % player.video_get_scale())
                 print('Aspect ratio: %s' % player.video_get_aspect_ratio())
-               #print('Window:' % player.get_hwnd()
+            # print('Window:' % player.get_hwnd()
             except Exception:
                 print('Error: %s' % sys.exc_info()[1])
+
 
         def sec_forward():
             """Go forward one sec"""
             player.set_time(player.get_time() + 1000)
 
+
         def sec_backward():
             """Go backward one sec"""
             player.set_time(player.get_time() - 1000)
+
 
         def frame_forward():
             """Go forward one frame"""
             player.set_time(player.get_time() + mspf())
 
+
         def frame_backward():
             """Go backward one frame"""
             player.set_time(player.get_time() - mspf())
+
 
         def print_help():
             """Print help"""
@@ -8633,14 +8994,17 @@ if __name__ == '__main__':
                 print('  %s: %s.' % (k, m.rstrip('.')))
             print('0-9: go to that fraction of the movie')
 
+
         def quit_app():
             """Stop and exit"""
             sys.exit(0)
+
 
         def toggle_echo_position():
             """Toggle echoing of media position"""
             global echo_position
             echo_position = not echo_position
+
 
         keybindings = {
             ' ': player.pause,
@@ -8653,7 +9017,7 @@ if __name__ == '__main__':
             'p': toggle_echo_position,
             'q': quit_app,
             '?': print_help,
-            }
+        }
 
         print('Press q to quit, ? to get help.%s' % os.linesep)
         while True:
@@ -8662,5 +9026,5 @@ if __name__ == '__main__':
             if k in keybindings:
                 keybindings[k]()
             elif k.isdigit():
-                 # jump to fraction of the movie.
-                player.set_position(float('0.'+k))
+                # jump to fraction of the movie.
+                player.set_position(float('0.' + k))
