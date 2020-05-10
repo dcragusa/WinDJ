@@ -66,6 +66,7 @@ You can increase this if you have a huge songlist, for example.
 If it fixed it has no title bar and is therefore slightly smaller.
 - `controls_captured` is whether WinDJ controls will be captured (invisible to other programs) or not.
 If you wish to micspam as in the instructions above, this must be false to allow the game to register the micspam toggle button.
+- `search_captured` is whether keys captured (invisible to other programs) or not when searching in WinDJ.
 - `output_device` is the device code that WinDJ will output audio to. 
 You can comment this out with a `;` if you want WinDJ to output over your default sound output.
 Use `WinDJHelper` to find your audio device codes.

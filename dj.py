@@ -83,6 +83,7 @@ Settings = AttrDict({
     'ver_offset': get_setting_from_config('ver_offset', int, 100),
     'scroll_step': get_setting_from_config('scroll_step', int, 5),
     'controls_captured': get_setting_from_config('controls_captured', bool, False),
+    'search_captured': get_setting_from_config('search_captured', bool, False),
     'output_device': get_setting_from_config('output_device', str, None)
 })
 
@@ -114,15 +115,16 @@ class WinDJ:
         self.root.bind('<<keypressed>>', self.button_press)
 
         # WinDJ init
-        self.visible = True
-        self.playing = False
-        self.search_open = False
+        self.is_visible = True
+        self.is_playing = False
+        self.is_searching = False
         self.search_string = ''
-        self.saved_volume = 50
+        self.saved_volume = 30
         self.playing_name = ''
         self.play_lock = False
         self.youtube_mode = False
         self.youtube_thread = None
+        self.timer_callback = None
 
         # song list
         self.song_list = None  # will be populated line below
@@ -134,18 +136,22 @@ class WinDJ:
         self.p = self.instance.media_player_new()
 
         # searches and labels
-        self.search = tk.StringVar()
-        self.search_box = tk.Label(self.root, textvariable=self.search)
+        self.search_var = tk.StringVar()
+        self.search_box = tk.Label(self.root, textvariable=self.search_var)
         self.search_box.grid(row=0, columnspan=2)
-        self.song_name = tk.StringVar()
-        self.label_songname = tk.Label(self.root, textvariable=self.song_name, anchor=tk.W)
+
+        self.songname_var = tk.StringVar()
+        self.label_songname = tk.Label(self.root, textvariable=self.songname_var, anchor=tk.W)
         self.label_songname.grid(row=2, columnspan=2)
-        self.timer = tk.StringVar()
-        self.label_timer = tk.Label(self.root, textvariable=self.timer, anchor=tk.W)
+
+        self.timer_var = tk.StringVar()
+        self.label_timer = tk.Label(self.root, textvariable=self.timer_var, anchor=tk.W)
         self.label_timer.grid(row=3, columnspan=2)
-        self.status = tk.StringVar()
-        self.label_status = tk.Label(self.root, textvariable=self.status)
+
+        self.status_var = tk.StringVar()
+        self.label_status = tk.Label(self.root, textvariable=self.status_var)
         self.label_status.grid(row=4, columnspan=2)
+
         self.button_youtube = tk.Button(self.root, text='Youtube', command=self.toggle_youtube_mode)
         self.button_youtube.grid(row=5, columnspan=2)
         self.search_box.grid_remove()
@@ -159,12 +165,7 @@ class WinDJ:
         self.scrollbar.config(command=self.listbox.yview)
 
         # ignore double controls on listbox
-        self.listbox.bind('<Down>', self.ignore_event)
-        self.listbox.bind('<Up>', self.ignore_event)
-        self.listbox.bind('<Left>', self.ignore_event)
-        self.listbox.bind('<Right>', self.ignore_event)
-        self.listbox.bind('<Next>', self.ignore_event)
-        self.listbox.bind('<Prior>', self.ignore_event)
+        self.listbox.bind('<Up> <Down> <Left> <Right> <Next> <Prior>', self.ignore_event)
 
         # bind clicks
         self.listbox.bind('<Button-1>', self.click)
@@ -179,7 +180,6 @@ class WinDJ:
 
         # set up labels
         self.update_labels()
-        self.update_timer()
 
         # configure sizing
         self.root.rowconfigure(1, weight=1)
@@ -236,33 +236,6 @@ class WinDJ:
         self.listbox.see(idx)
 
     def handle_button(self, key):
-        if self.search_open:
-            process = False
-            if key in Controls.values():
-                # controls override search
-                pass
-            elif len(key) == 1:
-                # not control character
-                self.search_string += key.lower()
-                process = True
-            elif key == 'Space':
-                self.search_string += ' '
-                process = True
-            elif key == 'Back':
-                self.search_string = self.search_string[:-1]
-                process = True
-            if process:
-                self.search.set(self.search_string)
-                if self.youtube_mode:
-                    # debounce the youtube search on a 0.5s timer
-                    if self.youtube_thread:
-                        self.youtube_thread.cancel()
-                    self.youtube_thread = threading.Timer(0.5, self.search_youtube)
-                    self.youtube_thread.daemon = True
-                    self.youtube_thread.start()
-                else:
-                    self.search_songlist()
-
         if key == Controls.toggle_play:
             if not self.play_lock:
                 self.play_lock = True  # when no lock, holding play gives crashes
@@ -305,22 +278,49 @@ class WinDJ:
         elif key == Controls.quit:
             self.root.quit()
             self.root.destroy()
+        elif self.is_searching:
+            process = False
+            if len(key) == 1:
+                # not control character
+                self.search_string += key.lower()
+                process = True
+            elif key == 'Space':
+                self.search_string += ' '
+                process = True
+            elif key == 'Back':
+                self.search_string = self.search_string[:-1]
+                process = True
+
+            if process:
+                self.search_var.set(self.search_string)
+                if self.youtube_mode:
+                    # debounce the youtube search on a 0.5s timer
+                    if self.youtube_thread:
+                        self.youtube_thread.cancel()
+                    self.youtube_thread = threading.Timer(0.5, self.search_youtube)
+                    self.youtube_thread.daemon = True
+                    self.youtube_thread.start()
+                else:
+                    self.populate_song_list()
+                    self.search_songlist()
 
     def toggle_search(self):
-        self.hide_search() if self.search_open else self.show_search()
+        self.hide_search() if self.is_searching else self.show_search()
 
     def show_search(self):
-        self.search_open = True
+        self.is_searching = True
         self.search_box.grid()
         self.show()
         self.search_string = ''
-        self.search.set(self.search_string)
+        self.search_var.set(self.search_string)
         self.set_selection(0)
 
     def hide_search(self):
-        self.search_open = False
+        self.is_searching = False
         self.search_box.grid_remove()
         index = self.song_list[self.selected]['index'] if self.song_list else 0
+        if not self.youtube_mode:
+            self.populate_song_list()
         self.populate_listbox()
         self.set_selection(index)
 
@@ -343,10 +343,10 @@ class WinDJ:
 
     def toggle_play(self):
         self.listbox.focus_set()
-        self.stop() if self.playing else self.play()
+        self.stop() if self.is_playing else self.play()
 
     def play(self):
-        self.playing = True
+        self.is_playing = True
         entry = self.song_list[self.selected]
 
         if 'path' in entry:
@@ -365,12 +365,12 @@ class WinDJ:
 
         if Settings.hide_on_play:
             self.hide()
-        if self.search_open:
+        if self.is_searching:
             self.hide_search()
         self.update_labels()
 
     def stop(self):
-        self.playing = False
+        self.is_playing = False
         self.p.stop()
         self.instance = vlc.Instance()
         self.p = self.instance.media_player_new()
@@ -385,36 +385,37 @@ class WinDJ:
         self.p.pause()
 
     def toggle_show(self):
-        self.hide() if self.visible else self.show()
+        self.hide() if self.is_visible else self.show()
 
     def hide(self):
-        self.visible = False
+        self.is_visible = False
         self.root.withdraw()
 
     def show(self):
-        self.visible = True
+        self.is_visible = True
         self.root.update()
         self.root.deiconify()
 
     def update_labels(self):
-        if self.playing:
+        if self.is_playing:
             playing = 'Playing'
             songname = self.playing_name
+            self.update_timer()
         else:
             playing = 'Stopped'
             songname = '-'
+            if self.timer_callback:
+                self.root.after_cancel(self.timer_callback)
+            self.timer_var.set('-')
 
-        self.song_name.set(songname)
-        self.status.set(f'{playing} | Volume: {self.saved_volume}')
+        self.songname_var.set(songname)
+        self.status_var.set(f'{playing} | Volume: {self.saved_volume}')
 
     def update_timer(self):
-        if self.playing:
-            curtime = '%d:%02d' % divmod(round(self.p.get_time()/1000), 60)
-            tottime = '%d:%02d' % divmod(round(self.p.get_length()/1000), 60)
-            self.timer.set(f'{curtime} / {tottime}')
-        else:
-            self.timer.set('-')
-        self.root.after(500, self.update_timer)
+        curtime = '%d:%02d' % divmod(round(self.p.get_time()/1000), 60)
+        tottime = '%d:%02d' % divmod(round(self.p.get_length()/1000), 60)
+        self.timer_var.set(f'{curtime} / {tottime}')
+        self.timer_callback = self.root.after(500, self.update_timer)
 
     def populate_listbox(self):
         self.listbox.delete(0, tk.END)
@@ -474,7 +475,11 @@ if __name__ == '__main__':
         queue.put(event.Key)
         p_write.send(1)
         # controls captured by WinDJ and not passed through
-        return not (Settings.controls_captured and event.Key in Controls.values())
+        if (Settings.controls_captured and event.Key in Controls.values() or
+                Settings.search_captured and WinDJ.is_searching):
+            return False
+        else:
+            return True
 
     # poll the keyboard hook
     pipeloop = threading.Thread(target=start_pipe_loop)
