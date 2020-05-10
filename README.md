@@ -2,7 +2,7 @@
 WinDJ is an unobtrusive media player for Windows based on VLC. You can use it for micspam too!
 
 ## Features:
-- High quality music on any server or game with mic input. No need for server settings like sv_allow_voice_from_file or sv_use_steam_voice!
+- High quality music on any server or game with mic input. No need for server settings like `sv_allow_voice_from_file` or `sv_use_steam_voice`!
 - Easy setup. Just add a folder with music in, tweak some settings (if you want) and go!
 - Minimalist window that you can hide and use while hidden
 - Intuitive default control scheme based on the numpad - but completely customisable controls too
