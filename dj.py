@@ -84,6 +84,7 @@ Settings = AttrDict({
     'scroll_step': get_setting_from_config('scroll_step', int, 5),
     'controls_captured': get_setting_from_config('controls_captured', bool, False),
     'search_captured': get_setting_from_config('search_captured', bool, False),
+    'toggle_play_captured': get_setting_from_config('toggle_play_captured', bool, False),
     'output_device': get_setting_from_config('output_device', str, None)
 })
 
@@ -477,6 +478,8 @@ if __name__ == '__main__':
         # controls captured by WinDJ and not passed through
         if (Settings.controls_captured and event.Key in Controls.values() or
                 Settings.search_captured and WinDJ.is_searching):
+            if not Settings.toggle_play_captured and event.Key == Controls.toggle_play:
+                return True
             return False
         else:
             return True
